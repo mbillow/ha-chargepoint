@@ -14,7 +14,6 @@ from python_chargepoint.exceptions import (
     ChargePointCommunicationException,
 )
 
-from . import persist_session_token
 from .const import DOMAIN
 
 
@@ -30,7 +29,6 @@ class ChargePointBaseFlowHandler(config_entries.ConfigFlow):
                 ChargePoint, username, password
             )
             _LOGGER.error("New session token: %s", client.session_token)
-            persist_session_token()
             return client.session_token
         except ChargePointLoginError:
             return
