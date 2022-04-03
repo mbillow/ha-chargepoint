@@ -1,0 +1,6 @@
+.DS_Store
+.docker/data
+.python-version
+.idea/
+
+__pycache__/

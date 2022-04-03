@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ChargePoint Credentials",
+        "description": "Please enter your ChargePoint login credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+
+        }
+      }
+    },
+    "error": {
+      "invalid_credentials": "Invalid credentials"
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_credentials": "Invalid credentials"
+    }
+  }
+}

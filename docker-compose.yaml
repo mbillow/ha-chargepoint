@@ -1,0 +1,14 @@
+version: '2'
+services:
+  homeassistant:
+    container_name: home-assistant
+    image: homeassistant/home-assistant:stable
+    volumes:
+      - ./.docker/data:/config
+      - ./custom_components/ha-chargepoint:/config/custom_components/ha-chargepoint
+      - ./.docker/services:/etc/services.d/home-assistant
+    environment:
+      - TZ=America/Chicago
+    restart: always
+    ports:
+      - "127.0.0.1:8123:8123"
