@@ -5,7 +5,7 @@ services:
     image: homeassistant/home-assistant:stable
     volumes:
       - ./.docker/data:/config
-      - ./custom_components/ha-chargepoint:/config/custom_components/ha-chargepoint
+      - ./custom_components/chargepoint:/config/custom_components/chargepoint
       - ./.docker/services:/etc/services.d/home-assistant
     environment:
       - TZ=America/Chicago
