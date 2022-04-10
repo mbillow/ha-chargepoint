@@ -227,7 +227,7 @@ CHARGER_SENSORS = [
         key="session_cost",
         name_suffix="Charge Cost",
         icon="mdi:cash-multiple",
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.MONETARY,
         value=lambda entity: f"{entity.session.total_amount:.2f}"
         if entity.session
