@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 NAME = "ChargePoint"
 DOMAIN = "chargepoint"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 ATTRIBUTION = "Data provided by https://www.chargepoint.com"
 ISSUE_URL = "https://github.com/mbillow/ha-chargepoint/issues"
 
