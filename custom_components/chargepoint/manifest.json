@@ -4,10 +4,10 @@
   "documentation": "https://github.com/mbillow/ha-chargepoint",
   "codeowners": ["@mbillow"],
   "requirements": [
-      "python-chargepoint==1.2.2"
+      "python-chargepoint==1.3.0"
     ],
   "config_flow": true,
   "issue_tracker": "https://github.com/mbillow/ha-chargepoint/issues",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "iot_class": "cloud_polling"
 }

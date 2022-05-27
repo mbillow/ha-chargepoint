@@ -232,9 +232,7 @@ CHARGER_SENSORS = [
         value=lambda entity: f"{entity.session.total_amount:.2f}"
         if entity.session
         else "0.00",
-        unit=lambda entity: entity.session.currency_iso_code
-        if entity.session
-        else "USD",
+        unit=lambda entity: entity.client.region.currency_symbol
     ),
 ]
 
