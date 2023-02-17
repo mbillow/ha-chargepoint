@@ -126,7 +126,7 @@ ACCOUNT_SENSORS = [
         icon="mdi:wallet",
         device_class=SensorDeviceClass.MONETARY,
         unit=lambda entity: entity.account.account_balance.currency,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
         value=lambda entity: f"{float(entity.account.account_balance.amount):.2f}",
     ),
 ]
@@ -227,7 +227,7 @@ CHARGER_SENSORS = [
         key="session_cost",
         name_suffix="Charge Cost",
         icon="mdi:cash-multiple",
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
         device_class=SensorDeviceClass.MONETARY,
         value=lambda entity: f"{entity.session.total_amount:.2f}"
         if entity.session
