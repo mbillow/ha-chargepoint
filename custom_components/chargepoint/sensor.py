@@ -28,7 +28,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.util.unit_system import UnitSystem
 
-from . import ChargePointEntity, ChargePointChargerEntity
+from . import (
+    ChargePointEntity,
+    ChargePointChargerEntity,
+    ChargePointEntityRequiredKeysMixin,
+)
 from .const import DATA_CLIENT, DATA_COORDINATOR, DOMAIN, ACCT_HOME_CRGS
 
 
@@ -39,9 +43,6 @@ _LOGGER = logging.getLogger(__name__)
 class ChargePointSensorRequiredKeysMixin:
     """Mixin for required keys."""
 
-    # Suffix to be appended to the sensor name
-    name_suffix: str
-
     # Function to determine the value for this sensor, given the coordinator data and the configured unit system
     value: Callable[
         [Union["ChargePointSensorEntity", "ChargePointChargerSensorEntity"]], StateType
@@ -50,7 +51,9 @@ class ChargePointSensorRequiredKeysMixin:
 
 @dataclass
 class ChargePointSensorEntityDescription(
-    SensorEntityDescription, ChargePointSensorRequiredKeysMixin
+    SensorEntityDescription,
+    ChargePointEntityRequiredKeysMixin,
+    ChargePointSensorRequiredKeysMixin,
 ):
     """Describes a ChargePoint sensor entity."""
 
@@ -62,9 +65,6 @@ class ChargePointSensorEntityDescription(
             StateType,
         ]
     ] = None
-
-    # Optional Device info to bubble up into the sensor entity.
-    device_info: Optional[DeviceInfo] = None
 
 
 class ChargePointSensorEntity(SensorEntity, ChargePointEntity):
@@ -232,7 +232,7 @@ CHARGER_SENSORS = [
         value=lambda entity: f"{entity.session.total_amount:.2f}"
         if entity.session
         else "0.00",
-        unit=lambda entity: entity.client.global_config.default_currency.symbol
+        unit=lambda entity: entity.client.global_config.default_currency.symbol,
     ),
 ]
 

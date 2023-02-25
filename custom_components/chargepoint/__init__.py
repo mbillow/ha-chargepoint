@@ -5,6 +5,7 @@ Custom integration to integrate ChargePoint with Home Assistant.
 import os
 import json
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
@@ -261,3 +262,15 @@ class ChargePointChargerEntity(CoordinatorEntity):
         session: ChargingSession = self.coordinator.data[ACCT_SESSION]
         if session and session.device_id == self.charger_id:
             return self.coordinator.data[ACCT_SESSION]
+
+    @session.setter
+    def session(self, new_session: Optional[ChargingSession]):
+        self.coordinator.data[ACCT_SESSION] = new_session
+
+
+@dataclass
+class ChargePointEntityRequiredKeysMixin:
+    """Mixin for required keys on all entities."""
+
+    # Suffix to be appended to the entity name
+    name_suffix: str

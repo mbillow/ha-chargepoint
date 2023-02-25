@@ -24,11 +24,10 @@ class ChargePointBaseFlowHandler(config_entries.ConfigFlow):
     async def _test_credentials(self, username, password) -> Optional[str]:
         """Return true if credentials is valid."""
         try:
-            _LOGGER.error("Attempting to authenticate with chargepoint")
+            _LOGGER.info("Attempting to authenticate with chargepoint")
             client = await self.hass.async_add_executor_job(
                 ChargePoint, username, password
             )
-            _LOGGER.error("New session token: %s", client.session_token)
             return client.session_token
         except ChargePointLoginError:
             return

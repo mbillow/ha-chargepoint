@@ -6,12 +6,12 @@ from homeassistant.const import Platform
 NAME = "ChargePoint"
 DOMAIN = "chargepoint"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "0.4.0"
+VERSION = "0.6.0"
 ATTRIBUTION = "Data provided by https://www.chargepoint.com"
 ISSUE_URL = "https://github.com/mbillow/ha-chargepoint/issues"
 
 # Platforms
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH]
 
 
 # Configuration and options
@@ -20,6 +20,7 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
 TOKEN_FILE_NAME = "chargepoint_session.json"
+CHARGER_SESSION_STATE_IN_USE = "IN_USE"
 
 # Account Data
 ACCT_INFO = "account_information"
