@@ -21,6 +21,7 @@ from homeassistant.const import (
     STATE_ON,
     STATE_OFF,
     TIME_SECONDS,
+    TIME_MINUTES,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
@@ -182,6 +183,16 @@ CHARGER_SENSORS = [
         if entity.session
         else 0,
         native_unit_of_measurement=TIME_SECONDS,
+    ),
+    ChargePointSensorEntityDescription(
+        key="session_charging_time_minute",
+        name_suffix="Charging Time (Minute)",
+        icon="mdi:timer",
+        state_class=SensorStateClass.MEASUREMENT,
+        value=lambda entity: int(entity.session.charging_time / 1000 / 60)
+        if entity.session
+        else 0,
+        native_unit_of_measurement=TIME_MINUTES,
     ),
     ChargePointSensorEntityDescription(
         key="session_power_kw",
