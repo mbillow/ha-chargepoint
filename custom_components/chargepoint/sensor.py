@@ -156,13 +156,14 @@ CHARGER_SENSORS = [
         if entity.charger_status.connected
         else "Disconnected",
     ),
-    ChargePointSensorEntityDescription(
-        key="last_connected_at",
-        name_suffix="Last Connected At",
-        device_class=SensorDeviceClass.TIMESTAMP,
-        icon="mdi:progress-clock",
-        value=lambda entity: entity.charger_status.last_connected_at,
-    ),
+# Problem with ChargePoint API?  Disabling per https://github.com/mbillow/ha-chargepoint/issues/33
+#    ChargePointSensorEntityDescription(
+#        key="last_connected_at",
+#        name_suffix="Last Connected At",
+#        device_class=SensorDeviceClass.TIMESTAMP,
+#        icon="mdi:progress-clock",
+#        value=lambda entity: entity.charger_status.last_connected_at,
+#    ),
     ChargePointSensorEntityDescription(
         key="session_charging_state",
         name_suffix="Charger State",
