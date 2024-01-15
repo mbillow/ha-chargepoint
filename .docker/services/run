@@ -5,7 +5,7 @@
 
 cd /config || bashio::exit.nok "Can't find config folder!"
 
-pip3 install python-chargepoint==1.8.0 || bashio::log.info "Failed to install python-chargepoint!"
+pip3 install git+https://github.com/conorbranagan/python-chargepoint@conor/add-set-amperage-limit-ha || bashio::log.info "Failed to install python-chargepoint!"
 
 # Enable Jemalloc for Home Assistant Core, unless disabled
 if [[ -z "${DISABLE_JEMALLOC+x}" ]]; then
