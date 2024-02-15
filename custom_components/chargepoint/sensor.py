@@ -1,7 +1,7 @@
 """Sensor platform for ChargePoint."""
 import logging
 from dataclasses import dataclass
-from typing import Callable, Any, Optional, Union
+from typing import Callable, Optional, Union
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -10,23 +10,10 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_UNIT_SYSTEM_IMPERIAL,
-    LENGTH_KILOMETERS,
-    LENGTH_MILES,
-    PERCENTAGE,
-    PRESSURE_PSI,
-    CURRENCY_DOLLAR,
-    STATE_UNAVAILABLE,
-    STATE_ON,
-    STATE_OFF,
-    TIME_SECONDS,
-)
+from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
-from homeassistant.util.unit_system import UnitSystem
 
 from . import (
     ChargePointEntity,
@@ -182,7 +169,7 @@ CHARGER_SENSORS = [
         value=lambda entity: int(entity.session.charging_time / 1000)
         if entity.session
         else 0,
-        native_unit_of_measurement=TIME_SECONDS,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
     ),
     ChargePointSensorEntityDescription(
         key="session_power_kw",
