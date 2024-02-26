@@ -11,7 +11,7 @@ ATTRIBUTION = "Data provided by https://www.chargepoint.com"
 ISSUE_URL = "https://github.com/mbillow/ha-chargepoint/issues"
 
 # Platforms
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.SELECT]
 
 
 # Configuration and options
