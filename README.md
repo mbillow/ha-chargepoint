@@ -12,13 +12,7 @@ manually include this repository in HACS:
 1. If you haven't already installed HACS, follow [their instructions](https://hacs.xyz/docs/setup/prerequisites).
 2. Navigate to HACS.
 3. Choose "Integrations"
-4. Add this repository to your configuration.
-   1. Click the three dots in the upper right-hand corner.
-   2. Select "Custom repositories"
-   3. Enter `mbillow/ha-chargepoint` into the repository box.
-   4. Select the "Integration" type.
-   5. Click `Add`.
-5. Install the integration like you would [any other HACS addon](https://hacs.xyz/docs/navigation/overview).
+4. Install the integration like you would [any other HACS addon](https://hacs.xyz/docs/navigation/overview).
 
 ## Usage
 
