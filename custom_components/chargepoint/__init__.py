@@ -101,14 +101,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
-    original_session_token = entry.data[CONF_ACCESS_TOKEN]
-    session_token = retrieve_session_token(hass, entry) or original_session_token
+    current_token = entry.data[CONF_ACCESS_TOKEN]
+    token_from_disk = await hass.async_add_executor_job(
+        retrieve_session_token, hass, entry
+    )
+    session_token = token_from_disk or current_token
 
     try:
         client: ChargePoint = await hass.async_add_executor_job(
             ChargePoint, username, password, session_token
         )
-        persist_session_token(hass, entry, client.session_token)
+        await hass.async_add_executor_job(
+            persist_session_token, hass, entry, client.session_token
+        )
     except ChargePointLoginError as exc:
         _LOGGER.error("Failed to authenticate to ChargePoint")
         raise ConfigEntryAuthFailed from exc
