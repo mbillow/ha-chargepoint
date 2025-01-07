@@ -6,9 +6,6 @@ A cloud-polling Home Assistant component to expose ChargePoint Home Charger and 
 
 ## Installation
 
-While we are waiting to get included in the default HACS repositories, you can
-manually include this repository in HACS:
-
 1. If you haven't already installed HACS, follow [their instructions](https://hacs.xyz/docs/setup/prerequisites).
 2. Navigate to HACS.
 3. Choose "Integrations"
