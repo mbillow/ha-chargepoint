@@ -19,12 +19,12 @@ from .const import (
     DATA_CLIENT,
     DATA_COORDINATOR,
     DOMAIN,
-    ACCT_HOME_CRGS
+    ACCT_HOME_CRGS,
+    EXCEPTION_WARNING_MSG
 )
 
 _LOGGER = logging.getLogger(__name__)
-EXCEPTION_WARNING_MSG = "ChargePoint returned an exception, you might want to " + \
-                        "double check the charging status in the app."
+
 
 class ChargePointChargerButtonEntity(ButtonEntity, ChargePointChargerEntity):
     """Representation of a ChargePoint Charger Device Button."""
@@ -89,7 +89,7 @@ CHARGER_BUTTONS: List[
             key="restart_charger",
             name_suffix="Restart Charger",
             device_class=ButtonDeviceClass.RESTART,
-            icon="mdi:lightning-bolt",
+            icon="mdi:restart",
         ),
     )
 ]

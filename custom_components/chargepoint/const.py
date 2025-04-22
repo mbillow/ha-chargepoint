@@ -32,6 +32,8 @@ ACCT_HOME_CRGS = "home_chargers"
 DATA_CLIENT = "chargepoint_client"
 DATA_COORDINATOR = "coordinator"
 DATA_CHARGERS = "home_chargers"
+EXCEPTION_WARNING_MSG = "ChargePoint returned an exception, you might want to " + \
+                        "double check the charging status in the app."
 
 # Defaults
 DEFAULT_NAME = "chargepoint"
