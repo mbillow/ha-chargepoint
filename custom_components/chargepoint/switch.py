@@ -21,11 +21,10 @@ from .const import (
     DOMAIN,
     ACCT_HOME_CRGS,
     CHARGER_SESSION_STATE_IN_USE,
+    EXCEPTION_WARNING_MSG
 )
 
 _LOGGER = logging.getLogger(__name__)
-EXCEPTION_WARNING_MSG = "ChargePoint returned an exception, you might want to " + \
-                        "double check the charging status in the app."
 
 class ChargePointChargerSwitchEntity(SwitchEntity, ChargePointChargerEntity):
     """Representation of a ChargePoint Charger Device Switch."""
