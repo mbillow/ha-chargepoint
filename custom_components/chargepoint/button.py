@@ -40,7 +40,7 @@ class ChargePointChargerButtonEntity(ButtonEntity, ChargePointChargerEntity):
         self._attr_name = f"{self.short_charger_model} {description.name_suffix}"
         self._attr_unique_id = f"{charger_id}_{description.key}"
 
-    def press(self) -> None:
+    async def async_press(self) -> None:
         """Press the button."""
         pass
 
@@ -100,7 +100,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the sensor platform."""
+    """Set up the buttons."""
 
     client = hass.data[DOMAIN][config_entry.entry_id][DATA_CLIENT]
     coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_COORDINATOR]
@@ -109,6 +109,7 @@ async def async_setup_entry(
 
     for charger_id in coordinator.data[ACCT_HOME_CRGS].keys():
         for button_class, description in CHARGER_BUTTONS:
+            _LOGGER.info("adding button for %s", button_class)
             entities.append(
                 button_class(hass, client, coordinator, description, charger_id)
             )

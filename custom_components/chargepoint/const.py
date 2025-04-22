@@ -6,12 +6,12 @@ from homeassistant.const import Platform
 NAME = "ChargePoint"
 DOMAIN = "chargepoint"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "0.6.0"
+VERSION = "0.9.0"
 ATTRIBUTION = "Data provided by https://www.chargepoint.com"
 ISSUE_URL = "https://github.com/mbillow/ha-chargepoint/issues"
 
 # Platforms
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.SELECT]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.SELECT, Platform.BUTTON]
 
 
 # Configuration and options
@@ -37,3 +37,7 @@ EXCEPTION_WARNING_MSG = "ChargePoint returned an exception, you might want to " 
 
 # Defaults
 DEFAULT_NAME = "chargepoint"
+
+
+def getVersion() -> str:
+    
