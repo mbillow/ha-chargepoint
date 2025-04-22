@@ -37,7 +37,3 @@ EXCEPTION_WARNING_MSG = "ChargePoint returned an exception, you might want to " 
 
 # Defaults
 DEFAULT_NAME = "chargepoint"
-
-
-def getVersion() -> str:
-    
