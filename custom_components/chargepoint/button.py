@@ -109,7 +109,6 @@ async def async_setup_entry(
 
     for charger_id in coordinator.data[ACCT_HOME_CRGS].keys():
         for button_class, description in CHARGER_BUTTONS:
-            _LOGGER.info("adding button for %s", button_class)
             entities.append(
                 button_class(hass, client, coordinator, description, charger_id)
             )
