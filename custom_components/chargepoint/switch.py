@@ -1,30 +1,30 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Any, List, Tuple, Type, Optional
+from typing import Any, List, Optional, Tuple, Type
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.switch import (
     SwitchDeviceClass,
     SwitchEntity,
     SwitchEntityDescription,
 )
-
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from python_chargepoint.exceptions import ChargePointCommunicationException
 
 from . import ChargePointChargerEntity, ChargePointEntityRequiredKeysMixin
 from .const import (
+    ACCT_HOME_CRGS,
+    CHARGER_SESSION_STATE_IN_USE,
     DATA_CLIENT,
     DATA_COORDINATOR,
     DOMAIN,
-    ACCT_HOME_CRGS,
-    CHARGER_SESSION_STATE_IN_USE,
-    EXCEPTION_WARNING_MSG
+    EXCEPTION_WARNING_MSG,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class ChargePointChargerSwitchEntity(SwitchEntity, ChargePointChargerEntity):
     """Representation of a ChargePoint Charger Device Switch."""

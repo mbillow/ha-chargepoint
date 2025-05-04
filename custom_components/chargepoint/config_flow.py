@@ -1,136 +1,221 @@
 """Adds config flow for ChargePoint."""
+
 import logging
 from collections import OrderedDict
-from typing import Any, Dict, Optional
+from typing import Any, Mapping, Tuple
 
 import voluptuous as vol
-from homeassistant import config_entries
+from homeassistant.config_entries import (
+    CONN_CLASS_CLOUD_POLL,
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    FlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN
+from homeassistant.helpers.selector import selector
 from python_chargepoint import ChargePoint
-
 from python_chargepoint.exceptions import (
-    ChargePointLoginError,
     ChargePointCommunicationException,
+    ChargePointLoginError,
 )
 
-from .const import DOMAIN
-
+from .const import (
+    DOMAIN,
+    OPTION_POLL_INTERVAL,
+    POLL_INTERVAL_DEFAULT,
+    POLL_INTERVAL_OPTIONS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class ChargePointBaseFlowHandler(config_entries.ConfigFlow):
-    async def _test_credentials(self, username, password) -> Optional[str]:
+def _login_schema(username: str = "") -> vol.Schema:
+    return vol.Schema(
+        OrderedDict(
+            [
+                (
+                    vol.Required(CONF_USERNAME, default=username),
+                    str,
+                ),
+                (vol.Required(CONF_PASSWORD, default=""), str),
+            ]
+        )
+    )
+
+
+def _options_schema(poll_interval: int | str = POLL_INTERVAL_DEFAULT) -> vol.Schema:
+    return vol.Schema(
+        OrderedDict(
+            [
+                (
+                    vol.Required(OPTION_POLL_INTERVAL, default=str(poll_interval)),
+                    selector(
+                        {
+                            "select": {
+                                "mode": "dropdown",
+                                "options": [
+                                    {"label": k, "value": str(v)}
+                                    for k, v in POLL_INTERVAL_OPTIONS.items()
+                                ],
+                            }
+                        }
+                    ),
+                ),
+            ]
+        )
+    )
+
+
+class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
+    """Config flow for ChargePoint."""
+
+    VERSION = 1
+    CONNECTION_CLASS = CONN_CLASS_CLOUD_POLL
+
+    def __init__(self):
+        self._reauth_entry: ConfigEntry | None = None
+
+    async def _login(
+        self, username: str, password: str
+    ) -> Tuple[str | None, str | None]:
         """Return true if credentials is valid."""
         try:
             _LOGGER.info("Attempting to authenticate with chargepoint")
             client = await self.hass.async_add_executor_job(
                 ChargePoint, username, password
             )
-            return client.session_token
-        except ChargePointLoginError:
-            return
-        except ChargePointCommunicationException:
-            _LOGGER.exception("Error testing provided credentials!")
+            return client.session_token, None
+        except ChargePointLoginError as exc:
+            error_id = exc.response.json().get("errorId")
+            if error_id == 9:
+                _LOGGER.exception("Invalid credentials for ChargePoint")
+                return None, "invalid_credentials"
+            elif error_id == 241:
+                _LOGGER.exception("ChargePoint Account is locked")
+                return None, "account_locked"
+            return None, str(exc)
+        except ChargePointCommunicationException as exc:
+            _LOGGER.exception("Failed to communicate with ChargePoint")
+            return None, str(exc)
 
-    # Options Flow
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
-        return OptionsFlowHandler(config_entry)
-
-
-class ChargePointFlowHandler(ChargePointBaseFlowHandler, domain=DOMAIN):
-    """Config flow for ChargePoint."""
-
-    VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
-
-    def __init__(self):
-        """Initialize."""
-        self._data = {}
-        self._errors = {}
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler()
 
     async def async_step_user(
-        self, user_input: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
-        self._errors = {}
+        username = ""
+        errors = {}
 
         if user_input is not None:
-            # self._data.update(user_input)
-            session_token = await self._test_credentials(
-                user_input[CONF_USERNAME],
-                user_input[CONF_PASSWORD],
-            )
+            username = user_input[CONF_USERNAME]
+            password = user_input[CONF_PASSWORD]
+
+            await self.async_set_unique_id(username)
+            self._abort_if_unique_id_configured()
+
+            session_token, error = await self._login(username, password)
+            if error is not None:
+                errors["base"] = error
             if session_token:
-                user_input[CONF_ACCESS_TOKEN] = session_token
                 return self.async_create_entry(
-                    title=user_input[CONF_USERNAME], data=user_input
+                    title=user_input[CONF_USERNAME],
+                    data={
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_ACCESS_TOKEN: session_token,
+                    },
                 )
-            else:
-                self._errors["base"] = "invalid_credentials"
-
-            return await self._show_config_form(user_input)
-
-        return await self._show_config_form(user_input)
-
-    async def _show_config_form(self, user_input):
-        """Show the configuration form to edit creds."""
-        if not user_input:
-            user_input = {}
-
-        data_schema = OrderedDict()
-        data_schema[vol.Required("username", default="", description="Username")] = str
-        data_schema[vol.Required("password", default="", description="Password")] = str
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(data_schema),
-            errors=self._errors,
+            data_schema=_login_schema(username),
+            errors=errors,
         )
 
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Triggered when reauth is needed."""
+        entry_id = self.context["entry_id"]
+        self._reauth_entry = self.hass.config_entries.async_get_entry(entry_id)
+        return await self.async_step_reauth_confirm()
 
-class OptionsFlowHandler(ChargePointBaseFlowHandler, config_entries.OptionsFlow):
-    def __init__(self, config_entry):
-        """Initialize HACS options flow."""
-        self.config_entry = config_entry
-        self.options = dict(config_entry.options)
-        self._errors = {}
-        self._data = {}
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        username = self._reauth_entry.data[CONF_USERNAME]
+        errors = {}
 
-    async def async_step_init(self, user_input=None):
-        return await self.async_step_user()
-
-    async def async_step_user(self, user_input=None):
         if user_input is not None:
-            self._data = user_input
-            return await self._update_options()
-
-        data_schema = OrderedDict()
-        data_schema[
-            vol.Required("username", default=self.config_entry.data.get(CONF_USERNAME))
-        ] = str
-        data_schema[vol.Required("password", default="")] = str
+            password = user_input[CONF_PASSWORD]
+            session_token, error = await self._login(username, password)
+            if error is not None:
+                errors["base"] = error
+            if session_token:
+                # Update the existing config entry
+                self.hass.config_entries.async_update_entry(
+                    self._reauth_entry,
+                    data={
+                        **self._reauth_entry.data,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_ACCESS_TOKEN: session_token,
+                    },
+                )
+                # Reload the config entry
+                await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(data_schema),
-            errors=self._errors,
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required(CONF_PASSWORD, default=""): str}),
+            description_placeholders={"username": username},
+            errors=errors,
         )
 
-    async def _update_options(self):
-        """Update config entry options."""
-        session_token = await self._test_credentials(
-            self._data[CONF_USERNAME],
-            self._data[CONF_PASSWORD],
-        )
-        if session_token:
-            self._data[CONF_ACCESS_TOKEN] = session_token
-            return self.async_create_entry(
-                title=self.config_entry.data.get(CONF_USERNAME), data=self._data
+
+class OptionsFlowHandler(OptionsFlow):
+    """Handle options flow for ChargePoint."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            poll_interval = int(user_input[OPTION_POLL_INTERVAL])
+            if poll_interval not in POLL_INTERVAL_OPTIONS.values():
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=_options_schema(poll_interval),
+                    errors={"base": "invalid_poll_interval"},
+                )
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                options={
+                    **self.config_entry.options,
+                    OPTION_POLL_INTERVAL: poll_interval,
+                },
             )
-        else:
-            self._errors["base"] = "invalid_credentials"
-            return await self.async_step_user()
+            # Reload the config entry
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_abort(reason="options_successful")
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_options_schema(
+                self.config_entry.options.get(
+                    OPTION_POLL_INTERVAL, POLL_INTERVAL_DEFAULT
+                )
+            ),
+        )

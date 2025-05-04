@@ -2,51 +2,53 @@
 Custom integration to integrate ChargePoint with Home Assistant.
 
 """
-import os
-import json
+
 import logging
+import os
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_ACCESS_TOKEN
-from homeassistant.exceptions import ConfigEntryNotReady, ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
     DataUpdateCoordinator,
     UpdateFailed,
-    CoordinatorEntity,
 )
-
 from python_chargepoint import ChargePoint
+from python_chargepoint.exceptions import (
+    ChargePointBaseException,
+    ChargePointCommunicationException,
+    ChargePointInvalidSession,
+    ChargePointLoginError,
+)
 from python_chargepoint.session import ChargingSession
 from python_chargepoint.types import (
     ChargePointAccount,
-    UserChargingStatus,
     HomeChargerStatus,
     HomeChargerTechnicalInfo,
-)
-from python_chargepoint.exceptions import (
-    ChargePointLoginError,
-    ChargePointCommunicationException,
-    ChargePointBaseException,
-    ChargePointInvalidSession,
+    UserChargingStatus,
 )
 
 from .const import (
-    DOMAIN,
-    ISSUE_URL,
-    PLATFORMS,
-    VERSION,
-    ACCT_INFO,
     ACCT_CRG_STATUS,
-    ACCT_SESSION,
     ACCT_HOME_CRGS,
+    ACCT_INFO,
+    ACCT_SESSION,
     DATA_CLIENT,
     DATA_COORDINATOR,
+    DOMAIN,
+    ISSUE_URL,
+    OPTION_POLL_INTERVAL,
+    PLATFORMS,
+    POLL_INTERVAL_DEFAULT,
+    POLL_INTERVAL_OPTIONS,
     TOKEN_FILE_NAME,
+    VERSION,
 )
 
 SCAN_INTERVAL = timedelta(minutes=5)
@@ -54,41 +56,15 @@ SCAN_INTERVAL = timedelta(minutes=5)
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 
-def persist_session_token(
-    hass: HomeAssistant, entry: ConfigEntry, session_token: str
-) -> None:
+def remove_session_token_from_disk(hass: HomeAssistant) -> None:
     config_dir = hass.config.config_dir
     file = os.path.join(config_dir, TOKEN_FILE_NAME)
-    session_dict = {}
     if os.path.isfile(file):
-        with open(file, "r") as spf:
-            try:
-                session_dict = json.load(spf)
-            except json.decoder.JSONDecodeError:
-                _LOGGER.error("Failed to load existing session data, overwriting!")
-    _LOGGER.info("Persisting session token to %s", file)
-    session_dict[entry.entry_id] = session_token
-    with open(os.open(file, os.O_CREAT | os.O_WRONLY, 0o600), "w") as spf:
-        json.dump(session_dict, spf)
-
-
-def retrieve_session_token(hass: HomeAssistant, entry: ConfigEntry) -> Optional[str]:
-    config_dir = hass.config.config_dir
-    file = os.path.join(config_dir, TOKEN_FILE_NAME)
-    _LOGGER.info("Retrieving session token from: %s", file)
-    if os.path.isfile(file):
-        with open(file, "r") as spf:
-            try:
-                sessions = json.load(spf)
-                return sessions.get(entry.entry_id)
-            except json.decoder.JSONDecodeError:
-                _LOGGER.error("Failed to decode JSON session data in %s", file)
-                return
+        os.remove(file)
 
 
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry):
     """Disallow configuration via YAML"""
-
     return True
 
 
@@ -101,22 +77,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
-    current_token = entry.data[CONF_ACCESS_TOKEN]
-    token_from_disk = await hass.async_add_executor_job(
-        retrieve_session_token, hass, entry
-    )
-    session_token = token_from_disk or current_token
+    session_token = entry.data[CONF_ACCESS_TOKEN]
+
+    # Cleanup the old session token from disk, we only store it in the ConfigEntry now.
+    await hass.async_add_executor_job(remove_session_token_from_disk, hass)
 
     try:
         client: ChargePoint = await hass.async_add_executor_job(
             ChargePoint, username, password, session_token
         )
-        await hass.async_add_executor_job(
-            persist_session_token, hass, entry, client.session_token
-        )
+
+        if client.session_token != session_token:
+            _LOGGER.debug("Session token refreshed by client, updating config entry")
+            hass.config_entries.async_update_entry(
+                entry,
+                data={
+                    **entry.data,
+                    CONF_ACCESS_TOKEN: session_token,
+                },
+            )
     except ChargePointLoginError as exc:
         _LOGGER.error("Failed to authenticate to ChargePoint")
-        raise ConfigEntryAuthFailed from exc
+        raise ConfigEntryAuthFailed(exc) from exc
     except ChargePointBaseException as exc:
         _LOGGER.error("Unknown ChargePoint Error!")
         raise ConfigEntryNotReady from exc
@@ -135,17 +117,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             account: ChargePointAccount = await hass.async_add_executor_job(
                 client.get_account
             )
+            _LOGGER.debug("Account information: %s", account)
             data[ACCT_INFO] = account
 
-            crg_status: Optional[
-                UserChargingStatus
-            ] = await hass.async_add_executor_job(client.get_user_charging_status)
+            crg_status: Optional[UserChargingStatus] = (
+                await hass.async_add_executor_job(client.get_user_charging_status)
+            )
+            _LOGGER.debug("User charging status: %s", crg_status)
             data[ACCT_CRG_STATUS] = crg_status
 
             if crg_status:
                 crg_session: ChargingSession = await hass.async_add_executor_job(
                     client.get_charging_session, crg_status.session_id
                 )
+                _LOGGER.debug("Charging session: %s", crg_session)
                 data[ACCT_SESSION] = crg_session
 
             home_chargers: list = await hass.async_add_executor_job(
@@ -168,20 +153,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 _LOGGER.warning(
                     "ChargePoint Session Token is invalid, attempting to re-login"
                 )
-                await hass.async_add_executor_job(client.login, username, password)
-                persist_session_token(hass, entry, client.session_token)
-                return await async_update_data(is_retry=True)
-            raise
+                try:
+                    await hass.async_add_executor_job(client.login, username, password)
+                    hass.config_entries.async_update_entry(
+                        entry,
+                        data={
+                            **entry.data,
+                            CONF_ACCESS_TOKEN: session_token,
+                        },
+                    )
+                    return await async_update_data(is_retry=True)
+                except ChargePointLoginError as exc:
+                    _LOGGER.error("Failed to authenticate to ChargePoint")
+                    raise ConfigEntryAuthFailed(exc) from exc
+
         except ChargePointCommunicationException as err:
             _LOGGER.error("Failed to update ChargePoint State")
             raise UpdateFailed from err
+
+    poll_interval = entry.options.get(OPTION_POLL_INTERVAL, POLL_INTERVAL_DEFAULT)
+    if poll_interval not in POLL_INTERVAL_OPTIONS.values():
+        _LOGGER.warning(
+            "Invalid poll interval %s, using default %s",
+            poll_interval,
+            POLL_INTERVAL_DEFAULT,
+        )
+        poll_interval = POLL_INTERVAL_DEFAULT
 
     coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name=DOMAIN,
         update_method=async_update_data,
-        update_interval=timedelta(minutes=3),
+        update_interval=timedelta(seconds=poll_interval),
     )
 
     hass.data[DOMAIN][entry.entry_id] = {
@@ -248,9 +252,11 @@ class ChargePointChargerEntity(CoordinatorEntity):
             identifiers={(DOMAIN, str(self.charger_id))},
             manufacturer=self.manufacturer,
             model=self.charger_status.model,
-            name=f"{self.manufacturer} Home Flex ({self.short_charger_model})"
-            if "CPH" in self.short_charger_model
-            else f"{self.manufacturer} {self.short_charger_model}",
+            name=(
+                f"{self.manufacturer} Home Flex ({self.short_charger_model})"
+                if "CPH" in self.short_charger_model
+                else f"{self.manufacturer} {self.short_charger_model}"
+            ),
             sw_version=self.technical_info.software_version,
         )
 
@@ -265,7 +271,15 @@ class ChargePointChargerEntity(CoordinatorEntity):
     @property
     def session(self) -> Optional[ChargingSession]:
         session: ChargingSession = self.coordinator.data[ACCT_SESSION]
-        if session and session.device_id == self.charger_id:
+        if not session:
+            return
+
+        _LOGGER.debug(
+            "Session in progress, checking if home charger (%s): %s",
+            self.charger_id,
+            session,
+        )
+        if session.device_id == self.charger_id:
             return self.coordinator.data[ACCT_SESSION]
 
     @session.setter

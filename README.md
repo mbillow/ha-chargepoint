@@ -13,15 +13,15 @@ A cloud-polling Home Assistant component to expose ChargePoint Home Charger and 
 
 ## Usage
 
-Once you have installed the component, you'll need to add and configure it. From the 
-`Configuration > Devices & Services` page, click `+ Add Integration` in the bottom 
+Once you have installed the component, you'll need to add and configure it. From the
+`Configuration > Devices & Services` page, click `+ Add Integration` in the bottom
 right.
 
 Search for ChargePoint and select the integration. You will be prompted for your
 ChargePoint credentials.
 
 Once you are logged in, if you have any home chargers, you will be asked which zones/rooms
-to assign each device to. Otherwise, you will just see a sensor exposing your account 
+to assign each device to. Otherwise, you will just see a sensor exposing your account
 balance.
 
 
@@ -29,9 +29,9 @@ balance.
 
 **Must be using `v0.1.2` or higher for proper sensor classification.**
 
-For users that have one or more ChargePoint Home Flex(es), you can add your chargers as 
-sources of grid consumption in Home Assistant's energy tracking system. Simply add the 
-`Energy Output` output sensor of your device and add the `Charge Cost` sensor an "entity 
+For users that have one or more ChargePoint Home Flex(es), you can add your chargers as
+sources of grid consumption in Home Assistant's energy tracking system. Simply add the
+`Energy Output` output sensor of your device and add the `Charge Cost` sensor an "entity
 tracking the total costs."
 
 ## Using with Third-Party Cards
@@ -47,6 +47,16 @@ the README if you end up building something you'd like to share.
 
 If you notice any issues, please create a GitHub issue describing the error and include
 any error messages or stack traces.
+
+### Developing
+
+Please ensure that you have the pre-commit hooks enabled. This will ensure that your
+contributions are formatted and styled correctly.
+
+```bash
+pip install pre-commit
+pre-commit install
+```
 
 ### Running the Integration
 

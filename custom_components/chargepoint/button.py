@@ -1,26 +1,24 @@
 import logging
-from datetime import datetime, timedelta
-from typing import Any, List, Tuple, Type, Optional
+from datetime import datetime
+from typing import Any, List, Optional, Tuple, Type
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.button import (
     ButtonDeviceClass,
     ButtonEntity,
-    ButtonEntityDescription
+    ButtonEntityDescription,
 )
-
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from python_chargepoint.exceptions import ChargePointCommunicationException
 
 from . import ChargePointChargerEntity, ChargePointEntityRequiredKeysMixin
 from .const import (
+    ACCT_HOME_CRGS,
     DATA_CLIENT,
     DATA_COORDINATOR,
     DOMAIN,
-    ACCT_HOME_CRGS,
-    EXCEPTION_WARNING_MSG
+    EXCEPTION_WARNING_MSG,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,41 +29,43 @@ class ChargePointChargerButtonEntity(ButtonEntity, ChargePointChargerEntity):
 
     entity_description: ButtonEntityDescription
 
-    def __init__(self, hass, client, coordinator, description, charger_id):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: Any,
+        coordinator: Any,
+        description: ButtonEntityDescription,
+        charger_id: str,
+    ) -> None:
         """Initialize account sensor."""
         super().__init__(client, coordinator, charger_id)
-        self.hass = hass
-        self.entity_description = description
+        self.hass: HomeAssistant = hass
+        self.entity_description: ButtonEntityDescription = description
+        self.last_toggled_on: Optional[datetime] = None
 
         self._attr_name = f"{self.short_charger_model} {description.name_suffix}"
         self._attr_unique_id = f"{charger_id}_{description.key}"
 
+    async def _async_press(self) -> None:
+        pass
+
     async def async_press(self) -> None:
         """Press the button."""
-        pass
+        await self.on_press()
+        self.last_toggled_on = datetime.now()
+        await self.coordinator.async_request_refresh()
 
 
 class ChargePointChargerRestartChargerButton(ChargePointChargerButtonEntity):
     """Specific entity for restarting the charger"""
 
-    def __init__(self, hass, client, coordinator, description, charger_id):
-        super().__init__(hass, client, coordinator, description, charger_id)
-        self.last_toggled_on: Optional[datetime] = None
-
-    async def async_press(self) -> None:
-
+    async def _async_press(self) -> None:
         try:
-            _LOGGER.info(
-                "Restarting ChargePoint Device ID: %s", self.charger_id
-            )
             self.session = await self.hass.async_add_executor_job(
                 self.client.restart_home_charger, self.charger_id
             )
         except ChargePointCommunicationException:
-            _LOGGER.warning(EXCEPTION_WARNING_MSG)
-
-        self.last_toggled_on = datetime.now()
-        await self.coordinator.async_request_refresh()
+            _LOGGER.exception(EXCEPTION_WARNING_MSG)
 
 
 class ChargePointChargerButtonEntityDescription(
@@ -91,7 +91,7 @@ CHARGER_BUTTONS: List[
             device_class=ButtonDeviceClass.RESTART,
             icon="mdi:restart",
         ),
-    )
+    ),
 ]
 
 

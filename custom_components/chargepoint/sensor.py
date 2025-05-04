@@ -1,4 +1,5 @@
 """Sensor platform for ChargePoint."""
+
 import logging
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
@@ -16,12 +17,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from . import (
-    ChargePointEntity,
     ChargePointChargerEntity,
+    ChargePointEntity,
     ChargePointEntityRequiredKeysMixin,
 )
-from .const import DATA_CLIENT, DATA_COORDINATOR, DOMAIN, ACCT_HOME_CRGS
-
+from .const import ACCT_HOME_CRGS, DATA_CLIENT, DATA_COORDINATOR, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,44 +131,44 @@ CHARGER_SENSORS = [
         key="plugged_in",
         name_suffix="Charging Cable",
         icon="mdi:power-plug",
-        value=lambda entity: "Plugged In"
-        if entity.charger_status.plugged_in
-        else "Unplugged",
+        value=lambda entity: (
+            "Plugged In" if entity.charger_status.plugged_in else "Unplugged"
+        ),
     ),
     ChargePointSensorEntityDescription(
         key="connected",
         name_suffix="Network",
         icon="mdi:wifi",
-        value=lambda entity: "Connected"
-        if entity.charger_status.connected
-        else "Disconnected",
+        value=lambda entity: (
+            "Connected" if entity.charger_status.connected else "Disconnected"
+        ),
     ),
-# Problem with ChargePoint API?  Disabling per https://github.com/mbillow/ha-chargepoint/issues/33
-#    ChargePointSensorEntityDescription(
-#        key="last_connected_at",
-#        name_suffix="Last Connected At",
-#        device_class=SensorDeviceClass.TIMESTAMP,
-#        icon="mdi:progress-clock",
-#        value=lambda entity: entity.charger_status.last_connected_at,
-#    ),
+    # Problem with ChargePoint API?  Disabling per https://github.com/mbillow/ha-chargepoint/issues/33
+    #    ChargePointSensorEntityDescription(
+    #        key="last_connected_at",
+    #        name_suffix="Last Connected At",
+    #        device_class=SensorDeviceClass.TIMESTAMP,
+    #        icon="mdi:progress-clock",
+    #        value=lambda entity: entity.charger_status.last_connected_at,
+    #    ),
     ChargePointSensorEntityDescription(
         key="session_charging_state",
         name_suffix="Charger State",
         icon="mdi:battery-charging",
-        value=lambda entity: str(entity.session.charging_state)
-        .replace("_", " ")
-        .title()
-        if entity.session
-        else "Not Charging",
+        value=lambda entity: (
+            str(entity.session.charging_state).replace("_", " ").title()
+            if entity.session
+            else "Not Charging"
+        ),
     ),
     ChargePointSensorEntityDescription(
         key="session_charging_time",
         name_suffix="Charging Time",
         icon="mdi:timer",
         state_class=SensorStateClass.MEASUREMENT,
-        value=lambda entity: int(entity.session.charging_time / 1000)
-        if entity.session
-        else 0,
+        value=lambda entity: (
+            int(entity.session.charging_time / 1000) if entity.session else 0
+        ),
         native_unit_of_measurement=UnitOfTime.SECONDS,
     ),
     ChargePointSensorEntityDescription(
@@ -186,9 +186,9 @@ CHARGER_SENSORS = [
         icon="mdi:lightning-bolt-circle",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value=lambda entity: round(entity.session.energy_kwh, 2)
-        if entity.session
-        else 0,
+        value=lambda entity: (
+            round(entity.session.energy_kwh, 2) if entity.session else 0
+        ),
         native_unit_of_measurement="kWh",
     ),
     ChargePointSensorEntityDescription(
@@ -196,9 +196,9 @@ CHARGER_SENSORS = [
         name_suffix="Miles Added",
         icon="mdi:road-variant",
         state_class=SensorStateClass.MEASUREMENT,
-        value=lambda entity: round(entity.session.miles_added, 2)
-        if entity.session
-        else 0,
+        value=lambda entity: (
+            round(entity.session.miles_added, 2) if entity.session else 0
+        ),
         native_unit_of_measurement="miles",
     ),
     ChargePointSensorEntityDescription(
@@ -206,9 +206,9 @@ CHARGER_SENSORS = [
         name_suffix="Miles / Hour Added",
         icon="mdi:car-speed-limiter",
         state_class=SensorStateClass.MEASUREMENT,
-        value=lambda entity: round(entity.session.miles_added_per_hour, 2)
-        if entity.session
-        else 0,
+        value=lambda entity: (
+            round(entity.session.miles_added_per_hour, 2) if entity.session else 0
+        ),
         native_unit_of_measurement="mph",
     ),
     ChargePointSensorEntityDescription(
@@ -217,9 +217,9 @@ CHARGER_SENSORS = [
         icon="mdi:cash-multiple",
         state_class=SensorStateClass.TOTAL,
         device_class=SensorDeviceClass.MONETARY,
-        value=lambda entity: f"{entity.session.total_amount:.2f}"
-        if entity.session
-        else "0.00",
+        value=lambda entity: (
+            f"{entity.session.total_amount:.2f}" if entity.session else "0.00"
+        ),
         unit=lambda entity: entity.client.global_config.default_currency.symbol,
     ),
 ]

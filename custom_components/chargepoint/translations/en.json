@@ -1,4 +1,21 @@
 {
+  "options": {
+    "step": {
+      "init": {
+        "title": "ChargePoint Options",
+        "description": "Configure ChargePoint component options.",
+        "data": {
+          "poll_interval": "Refresh Poll Interval"
+        }
+      }
+    },
+    "abort": {
+      "options_successful": "ChargePoint options updated successfully."
+    },
+    "error": {
+      "invalid_poll_interval": "Invalid poll interval. Please enter a value between 1 and 10 minutes."
+    }
+  },
   "config": {
     "step": {
       "user": {
@@ -7,25 +24,23 @@
         "data": {
           "username": "Username",
           "password": "Password"
-
         }
-      }
-    },
-    "error": {
-      "invalid_credentials": "Invalid credentials"
-    }
-  },
-  "options": {
-    "step": {
-      "user": {
+      },
+      "reauth_confirm": {
+        "title": "ChargePoint Reauthentication",
+        "description": "Please provide the current ChargePoint account password for '{username}'.",
         "data": {
-          "username": "Username",
           "password": "Password"
         }
       }
     },
+    "abort": {
+      "reauth_successful": "Reauthentication successful"
+    },
     "error": {
-      "invalid_credentials": "Invalid credentials"
+      "invalid_credentials": "Invalid credentials, please verify you're using the right credentials and try again.",
+      "unknown_error": "Unknown error communicating with ChargePoint. Please review the logs and create an issue.",
+      "account_locked": "Account locked due to failed login attempts. Please try after 30 minutes."
     }
   }
 }
