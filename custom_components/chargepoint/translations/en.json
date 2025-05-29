@@ -28,7 +28,7 @@
       },
       "reauth_confirm": {
         "title": "ChargePoint Reauthentication",
-        "description": "Please provide the current ChargePoint account password for '{username}'.",
+        "description": "Please provide the current ChargePoint account password for: {username}.",
         "data": {
           "password": "Password"
         }
