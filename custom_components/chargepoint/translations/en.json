@@ -23,14 +23,16 @@
         "description": "Please enter your ChargePoint login credentials.",
         "data": {
           "username": "Username",
-          "password": "Password"
+          "password": "Password",
+          "token": "Optional: auth_token"
         }
       },
       "reauth_confirm": {
         "title": "ChargePoint Reauthentication",
         "description": "Please provide the current ChargePoint account password for: {username}.",
         "data": {
-          "password": "Password"
+          "password": "Password",
+          "token": "Optional: auth_token"
         }
       }
     },
