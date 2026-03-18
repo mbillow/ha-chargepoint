@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
+from collections.abc import Callable
+
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -83,23 +86,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Cleanup the old session token from disk, we only store it in the ConfigEntry now.
     await hass.async_add_executor_job(remove_session_token_from_disk, hass)
 
-    try:
-        client: ChargePoint = await hass.async_add_executor_job(
-            ChargePoint, username, password, session_token
-        )
-
-        if client.session_token != session_token:
+    async def async_update_session_token():
+        if client.session_token != entry.data[CONF_ACCESS_TOKEN]:
             _LOGGER.debug("Session token refreshed by client, updating config entry")
             hass.config_entries.async_update_entry(
                 entry,
                 data={
                     **entry.data,
-                    CONF_ACCESS_TOKEN: session_token,
+                    CONF_ACCESS_TOKEN: client.session_token,
                 },
             )
+
+    async def async_add_executor_job(target: Callable, *args):
+            result = hass.async_add_excutor_job(target, *args)
+            async_update_session_token()
+            return result
+
+    try:
+        client: ChargePoint = await hass.async_add_executor_job(
+            ChargePoint, username, password, session_token
+        )
+        await async_update_session_token()
+
     except ChargePointLoginError as exc:
         _LOGGER.error("Failed to authenticate to ChargePoint")
         raise ConfigEntryAuthFailed(exc) from exc
+    
     except ChargePointBaseException as exc:
         _LOGGER.error("Unknown ChargePoint Error!")
         raise ConfigEntryNotReady from exc
@@ -114,35 +126,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             ACCT_SESSION: None,
             ACCT_HOME_CRGS: {},
         }
+
         try:
-            account: ChargePointAccount = await hass.async_add_executor_job(
+            account: ChargePointAccount = await async_add_executor_job(
                 client.get_account
             )
             _LOGGER.debug("Account information: %s", account)
             data[ACCT_INFO] = account
 
             crg_status: Optional[UserChargingStatus] = (
-                await hass.async_add_executor_job(client.get_user_charging_status)
+                await async_add_executor_job(client.get_user_charging_status)
             )
             _LOGGER.debug("User charging status: %s", crg_status)
             data[ACCT_CRG_STATUS] = crg_status
 
             if crg_status:
-                crg_session: ChargingSession = await hass.async_add_executor_job(
+                crg_session: ChargingSession = await async_add_executor_job(
                     client.get_charging_session, crg_status.session_id
                 )
                 _LOGGER.debug("Charging session: %s", crg_session)
                 data[ACCT_SESSION] = crg_session
 
-            home_chargers: list = await hass.async_add_executor_job(
+            home_chargers: list = await async_add_executor_job(
                 client.get_home_chargers
             )
             for charger in home_chargers:
-                hcrg_status: HomeChargerStatus = await hass.async_add_executor_job(
+                hcrg_status: HomeChargerStatus = await async_add_executor_job(
                     client.get_home_charger_status, charger
                 )
                 hcrg_tech_info: HomeChargerTechnicalInfo = (
-                    await hass.async_add_executor_job(
+                    await async_add_executor_job(
                         client.get_home_charger_technical_info, charger
                     )
                 )
@@ -155,14 +168,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                     "ChargePoint Session Token is invalid, attempting to re-login"
                 )
                 try:
-                    await hass.async_add_executor_job(client.login, username, password)
-                    hass.config_entries.async_update_entry(
-                        entry,
-                        data={
-                            **entry.data,
-                            CONF_ACCESS_TOKEN: session_token,
-                        },
-                    )
+                    await async_add_executor_job(client.login, username, password)
                     return await async_update_data(is_retry=True)
                 except ChargePointLoginError as exc:
                     _LOGGER.error("Failed to authenticate to ChargePoint")
