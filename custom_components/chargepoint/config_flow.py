@@ -13,7 +13,7 @@ from homeassistant.config_entries import (
     FlowResult,
     OptionsFlow,
 )
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME, CONF_TOKEN
 from homeassistant.core import callback
 from homeassistant.helpers.selector import selector
 from python_chargepoint import ChargePoint
@@ -41,6 +41,7 @@ def _login_schema(username: str = "") -> vol.Schema:
                     str,
                 ),
                 (vol.Required(CONF_PASSWORD, default=""), str),
+                (vol.Optional(CONF_TOKEN, default=None), str | None),
             ]
         )
     )
@@ -79,13 +80,13 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
         self._reauth_entry: ConfigEntry | None = None
 
     async def _login(
-        self, username: str, password: str
+        self, username: str, password: str, auth_token: str | None = None
     ) -> Tuple[str | None, str | None]:
         """Return true if credentials is valid."""
         try:
             _LOGGER.info("Attempting to authenticate with chargepoint")
             client = await self.hass.async_add_executor_job(
-                ChargePoint, username, password
+                ChargePoint, username, password, auth_token
             )
             return client.session_token, None
         except ChargePointLoginError as exc:
@@ -119,11 +120,12 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             username = user_input[CONF_USERNAME]
             password = user_input[CONF_PASSWORD]
+            auth_token = user_input[CONF_TOKEN]
 
             await self.async_set_unique_id(username)
             self._abort_if_unique_id_configured()
 
-            session_token, error = await self._login(username, password)
+            session_token, error = await self._login(username, password, auth_token=auth_token)
             if error is not None:
                 errors["base"] = error
             if session_token:
@@ -158,7 +160,8 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             password = user_input[CONF_PASSWORD]
-            session_token, error = await self._login(username, password)
+            auth_token = user_input[CONF_TOKEN]
+            session_token, error = await self._login(username, password, auth_token=auth_token)
             if error is not None:
                 errors["base"] = error
             if session_token:
@@ -178,7 +181,10 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_PASSWORD, default=""): str}),
+            data_schema=vol.Schema({
+                vol.Required(CONF_PASSWORD, default=""): str, 
+                vol.Optional(CONF_TOKEN, default=None): str | None,
+            }),
             description_placeholders={"username": username},
             errors=errors,
         )
