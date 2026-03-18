@@ -86,7 +86,7 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
         try:
             _LOGGER.info("Attempting to authenticate with chargepoint")
             client = await self.hass.async_add_executor_job(
-                ChargePoint, username, password, auth_token
+                ChargePoint, username, password, None, auth_token
             )
             return client.session_token, None
         except ChargePointLoginError as exc:
