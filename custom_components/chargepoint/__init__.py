@@ -98,8 +98,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             )
 
     async def async_add_executor_job(target: Callable, *args):
-            result = hass.async_add_excutor_job(target, *args)
-            async_update_session_token()
+            result = await hass.async_add_executor_job(target, *args)
+            await async_update_session_token()
             return result
 
     try:
