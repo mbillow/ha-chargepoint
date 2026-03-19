@@ -41,7 +41,7 @@ def _login_schema(username: str = "") -> vol.Schema:
                     str,
                 ),
                 (vol.Required(CONF_PASSWORD, default=""), str),
-                (vol.Optional(CONF_TOKEN, default=None), str | None),
+                (vol.Optional(CONF_TOKEN, default=""), str),
             ]
         )
     )
