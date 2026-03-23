@@ -54,7 +54,7 @@ Please ensure that you have the pre-commit hooks enabled. This will ensure that 
 contributions are formatted and styled correctly.
 
 ```bash
-pip install pre-commit
+pip install -r requirements_test.txt
 pre-commit install
 ```
 

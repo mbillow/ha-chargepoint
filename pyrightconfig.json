@@ -1,0 +1,6 @@
+{
+  "include": ["custom_components/chargepoint"],
+  "reportIncompatibleVariableOverride": false,
+  "reportPrivateImportUsage": false,
+  "reportIncompatibleMethodOverride": false
+}

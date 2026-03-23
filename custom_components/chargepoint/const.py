@@ -6,18 +6,17 @@ from homeassistant.const import Platform
 NAME = "ChargePoint"
 DOMAIN = "chargepoint"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "0.11.0"
+VERSION = "1.0.0"
 ATTRIBUTION = "Data provided by https://www.chargepoint.com"
 ISSUE_URL = "https://github.com/mbillow/ha-chargepoint/issues"
 
 # Platforms
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.SELECT, Platform.BUTTON]
+PLATFORMS = [Platform.SENSOR, Platform.SELECT, Platform.BUTTON, Platform.NUMBER]
 
 
 # Configuration and options
-CONF_ENABLED = "enabled"
 CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
+CONF_COULOMB_TOKEN = "coulomb_token"
 OPTION_POLL_INTERVAL = "poll_interval"
 
 POLL_INTERVAL_OPTIONS = {
@@ -39,10 +38,14 @@ ACCT_CRG_STATUS = "charging_status"
 ACCT_SESSION = "charging_session"
 ACCT_HOME_CRGS = "home_chargers"
 
+# Per-charger data sub-keys
+ACCT_CHARGER_STATUS = "status"
+ACCT_CHARGER_TECH_INFO = "tech_info"
+ACCT_CHARGER_CONFIG = "config"
+
 # Internal
 DATA_CLIENT = "chargepoint_client"
 DATA_COORDINATOR = "coordinator"
-DATA_CHARGERS = "home_chargers"
 EXCEPTION_WARNING_MSG = (
     "ChargePoint returned an exception, you might want to "
     + "double check the charging status in the app."

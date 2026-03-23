@@ -1,0 +1,10 @@
+pytest>=7.0
+pytest-asyncio>=0.23
+pytest-homeassistant-custom-component
+mypy>=1.0
+pyright
+black>=25.1.0
+flake8>=7.2.0
+isort>=6.0
+pre-commit
+python-chargepoint>=2.0.0

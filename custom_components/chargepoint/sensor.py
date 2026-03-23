@@ -1,8 +1,8 @@
 """Sensor platform for ChargePoint."""
 
 import logging
-from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -16,93 +16,62 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from . import (
-    ChargePointChargerEntity,
-    ChargePointEntity,
-    ChargePointEntityRequiredKeysMixin,
-)
+from . import ChargePointChargerEntity, ChargePointEntity
 from .const import ACCT_HOME_CRGS, DATA_CLIENT, DATA_COORDINATOR, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
-class ChargePointSensorRequiredKeysMixin:
-    """Mixin for required keys."""
-
-    # Function to determine the value for this sensor, given the coordinator data and the configured unit system
-    value: Callable[
-        [Union["ChargePointSensorEntity", "ChargePointChargerSensorEntity"]], StateType
-    ]
-
-
-@dataclass
-class ChargePointSensorEntityDescription(
-    SensorEntityDescription,
-    ChargePointEntityRequiredKeysMixin,
-    ChargePointSensorRequiredKeysMixin,
-):
+@dataclass(frozen=True)
+class ChargePointSensorEntityDescription(SensorEntityDescription):
     """Describes a ChargePoint sensor entity."""
 
-    # Function to determine the unit of measurement for this sensor, given the configured unit system
-    # Falls back to description.native_unit_of_measurement if it is not provided
-    unit: Optional[
-        Callable[
-            [Union["ChargePointSensorEntity", "ChargePointChargerSensorEntity"]],
-            StateType,
-        ]
-    ] = None
+    name_suffix: str = ""
+    value: Callable[..., StateType] = field(default=lambda _: None)
+    unit: Optional[Callable[..., StateType]] = None
 
 
 class ChargePointSensorEntity(SensorEntity, ChargePointEntity):
     """Representation of a ChargePoint Account sensor."""
 
-    entity_description: ChargePointSensorEntityDescription
+    entity_description: ChargePointSensorEntityDescription  # type: ignore[assignment]
 
     def __init__(self, client, coordinator, description):
-        """Initialize account sensor."""
         super().__init__(client, coordinator)
         self.entity_description = description
-
         self._attr_name = f"{self.account.user.username} {description.name_suffix}"
         self._attr_unique_id = f"{self.account.user.user_id}_{description.key}"
 
     @property
     def native_unit_of_measurement(self):
-        """Return the unit of measurement for the sensor, according to the configured unit system."""
         if unit_fn := self.entity_description.unit:
             return unit_fn(self)
         return self.entity_description.native_unit_of_measurement
 
     @property
     def native_value(self):
-        """Return the state of the sensor."""
         return self.entity_description.value(self)
 
 
 class ChargePointChargerSensorEntity(SensorEntity, ChargePointChargerEntity):
     """Representation of a ChargePoint Charging Device Sensor."""
 
-    entity_description: ChargePointSensorEntityDescription
+    entity_description: ChargePointSensorEntityDescription  # type: ignore[assignment]
 
     def __init__(self, client, coordinator, description, charger_id):
-        """Initialize account sensor."""
         super().__init__(client, coordinator, charger_id)
         self.entity_description = description
-
         self._attr_name = f"{self.short_charger_model} {description.name_suffix}"
         self._attr_unique_id = f"{charger_id}_{description.key}"
 
     @property
     def native_unit_of_measurement(self):
-        """Return the unit of measurement for the sensor, according to the configured unit system."""
         if unit_fn := self.entity_description.unit:
             return unit_fn(self)
         return self.entity_description.native_unit_of_measurement
 
     @property
     def native_value(self):
-        """Return the state of the sensor."""
         return self.entity_description.value(self)
 
 
@@ -132,7 +101,7 @@ CHARGER_SENSORS = [
         name_suffix="Charging Cable",
         icon="mdi:power-plug",
         value=lambda entity: (
-            "Plugged In" if entity.charger_status.plugged_in else "Unplugged"
+            "Plugged In" if entity.charger_status.is_plugged_in else "Unplugged"
         ),
     ),
     ChargePointSensorEntityDescription(
@@ -140,17 +109,9 @@ CHARGER_SENSORS = [
         name_suffix="Network",
         icon="mdi:wifi",
         value=lambda entity: (
-            "Connected" if entity.charger_status.connected else "Disconnected"
+            "Connected" if entity.charger_status.is_connected else "Disconnected"
         ),
     ),
-    # Problem with ChargePoint API?  Disabling per https://github.com/mbillow/ha-chargepoint/issues/33
-    #    ChargePointSensorEntityDescription(
-    #        key="last_connected_at",
-    #        name_suffix="Last Connected At",
-    #        device_class=SensorDeviceClass.TIMESTAMP,
-    #        icon="mdi:progress-clock",
-    #        value=lambda entity: entity.charger_status.last_connected_at,
-    #    ),
     ChargePointSensorEntityDescription(
         key="session_charging_state",
         name_suffix="Charger State",
@@ -234,10 +195,10 @@ async def async_setup_entry(
     client = hass.data[DOMAIN][config_entry.entry_id][DATA_CLIENT]
     coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_COORDINATOR]
 
-    entities: list[SensorEntity] = []
-
-    for description in ACCOUNT_SENSORS:
-        entities.append(ChargePointSensorEntity(client, coordinator, description))
+    entities: list[SensorEntity] = [
+        ChargePointSensorEntity(client, coordinator, description)
+        for description in ACCOUNT_SENSORS
+    ]
 
     for charger_id in coordinator.data[ACCT_HOME_CRGS].keys():
         for description in CHARGER_SENSORS:

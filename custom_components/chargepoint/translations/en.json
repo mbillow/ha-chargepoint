@@ -11,9 +11,6 @@
     },
     "abort": {
       "options_successful": "ChargePoint options updated successfully."
-    },
-    "error": {
-      "invalid_poll_interval": "Invalid poll interval. Please enter a value between 1 and 10 minutes."
     }
   },
   "config": {
@@ -28,9 +25,16 @@
       },
       "reauth_confirm": {
         "title": "ChargePoint Reauthentication",
-        "description": "Please provide the current ChargePoint account password for: {username}.",
+        "description": "Please provide the current ChargePoint account password for: **{username}**.",
         "data": {
           "password": "Password"
+        }
+      },
+      "captcha_token": {
+        "title": "Bot Protection Detected",
+        "description": "ChargePoint's bot protection (Datadome) blocked the password login. You can [resolve the challenge]({captcha_url}) in a browser and try again, or follow the steps below to provide a session token directly — this is more reliable and avoids the issue entirely.\n\n**How to get your token:**\n1. Open [https://driver.chargepoint.com](https://driver.chargepoint.com) in your browser and log in normally.\n2. Open Developer Tools and navigate to **Application → Cookies → https://driver.chargepoint.com**.\n3. Copy the value of the **`coulomb_sess`** cookie.\n4. Paste it into the field below.",
+        "data": {
+          "coulomb_token": "Coulomb Token (coulomb_sess cookie)"
         }
       }
     },
@@ -39,8 +43,8 @@
     },
     "error": {
       "invalid_credentials": "Invalid credentials, please verify you're using the right credentials and try again.",
-      "unknown_error": "Unknown error communicating with ChargePoint. Please review the logs and create an issue.",
-      "account_locked": "Account locked due to failed login attempts. Please try after 30 minutes."
+      "invalid_token": "The token is invalid or expired. Please obtain a fresh `coulomb_sess` cookie value from driver.chargepoint.com and try again.",
+      "unknown_error": "Unknown error communicating with ChargePoint. Please review the logs and create an issue."
     }
   }
 }

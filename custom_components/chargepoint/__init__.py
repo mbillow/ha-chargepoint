@@ -5,16 +5,17 @@ Custom integration to integrate ChargePoint with Home Assistant.
 
 import logging
 import os
-from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -22,20 +23,24 @@ from homeassistant.helpers.update_coordinator import (
 )
 from python_chargepoint import ChargePoint
 from python_chargepoint.exceptions import (
-    ChargePointBaseException,
-    ChargePointCommunicationException,
-    ChargePointInvalidSession,
-    ChargePointLoginError,
+    CommunicationError,
+    DatadomeCaptcha,
+    InvalidSession,
+    LoginError,
 )
 from python_chargepoint.session import ChargingSession
 from python_chargepoint.types import (
-    ChargePointAccount,
+    Account,
+    HomeChargerConfiguration,
     HomeChargerStatus,
     HomeChargerTechnicalInfo,
     UserChargingStatus,
 )
 
 from .const import (
+    ACCT_CHARGER_CONFIG,
+    ACCT_CHARGER_STATUS,
+    ACCT_CHARGER_TECH_INFO,
     ACCT_CRG_STATUS,
     ACCT_HOME_CRGS,
     ACCT_INFO,
@@ -57,6 +62,14 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 
+def remove_legacy_password(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove stored password from config entry data when upgrading from <1.0.0."""
+    if CONF_PASSWORD in entry.data:
+        hass.config_entries.async_update_entry(
+            entry, data={k: v for k, v in entry.data.items() if k != CONF_PASSWORD}
+        )
+
+
 def remove_session_token_from_disk(hass: HomeAssistant) -> None:
     config_dir = hass.config.config_dir
     file = os.path.join(config_dir, TOKEN_FILE_NAME)
@@ -72,103 +85,94 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Load the saved entities."""
     _LOGGER.info(
-        "Version %s is starting, if you have any issues please report" " them here: %s",
+        "Version %s is starting, if you have any issues please report them here: %s",
         VERSION,
         ISSUE_URL,
     )
     username = entry.data[CONF_USERNAME]
-    password = entry.data[CONF_PASSWORD]
-    session_token = entry.data[CONF_ACCESS_TOKEN]
+    coulomb_token: str = entry.data.get(CONF_ACCESS_TOKEN) or ""
+
+    # Scrub the password from the config entry if upgrading from <1.0.0.
+    remove_legacy_password(hass, entry)
 
     # Cleanup the old session token from disk, we only store it in the ConfigEntry now.
     await hass.async_add_executor_job(remove_session_token_from_disk, hass)
 
     try:
-        client: ChargePoint = await hass.async_add_executor_job(
-            ChargePoint, username, password, session_token
+        client: ChargePoint = await ChargePoint.create(
+            username,
+            coulomb_token=coulomb_token,
+            session=async_get_clientsession(hass),
         )
-
-        if client.session_token != session_token:
-            _LOGGER.debug("Session token refreshed by client, updating config entry")
-            hass.config_entries.async_update_entry(
-                entry,
-                data={
-                    **entry.data,
-                    CONF_ACCESS_TOKEN: session_token,
-                },
-            )
-    except ChargePointLoginError as exc:
+    except DatadomeCaptcha:
+        _LOGGER.error(
+            "Datadome bot-protection captcha triggered during ChargePoint setup. "
+            "Reauthentication required."
+        )
+        raise ConfigEntryAuthFailed("Datadome captcha required — please reauthenticate")
+    except InvalidSession:
+        _LOGGER.error("ChargePoint coulomb token is invalid or expired")
+        raise ConfigEntryAuthFailed("Session expired — please reauthenticate")
+    except LoginError as exc:
         _LOGGER.error("Failed to authenticate to ChargePoint")
         raise ConfigEntryAuthFailed(exc) from exc
-    except ChargePointBaseException as exc:
-        _LOGGER.error("Unknown ChargePoint Error!")
+    except CommunicationError as exc:
+        _LOGGER.error("Failed to communicate with ChargePoint during setup")
         raise ConfigEntryNotReady from exc
 
     hass.data.setdefault(DOMAIN, {})
 
-    async def async_update_data(is_retry: bool = False):
+    async def async_update_data():
         """Fetch data from ChargePoint API"""
-        data = {
+        data: dict[str, Any] = {
             ACCT_INFO: None,
             ACCT_CRG_STATUS: None,
             ACCT_SESSION: None,
             ACCT_HOME_CRGS: {},
         }
         try:
-            account: ChargePointAccount = await hass.async_add_executor_job(
-                client.get_account
-            )
+            account: Account = await client.get_account()
             _LOGGER.debug("Account information: %s", account)
             data[ACCT_INFO] = account
 
             crg_status: Optional[UserChargingStatus] = (
-                await hass.async_add_executor_job(client.get_user_charging_status)
+                await client.get_user_charging_status()
             )
             _LOGGER.debug("User charging status: %s", crg_status)
             data[ACCT_CRG_STATUS] = crg_status
 
             if crg_status:
-                crg_session: ChargingSession = await hass.async_add_executor_job(
-                    client.get_charging_session, crg_status.session_id
+                crg_session: ChargingSession = await client.get_charging_session(
+                    crg_status.session_id
                 )
                 _LOGGER.debug("Charging session: %s", crg_session)
                 data[ACCT_SESSION] = crg_session
 
-            home_chargers: list = await hass.async_add_executor_job(
-                client.get_home_chargers
-            )
+            home_chargers: list = await client.get_home_chargers()
             for charger in home_chargers:
-                hcrg_status: HomeChargerStatus = await hass.async_add_executor_job(
-                    client.get_home_charger_status, charger
+                hcrg_status: HomeChargerStatus = await client.get_home_charger_status(
+                    charger
                 )
                 hcrg_tech_info: HomeChargerTechnicalInfo = (
-                    await hass.async_add_executor_job(
-                        client.get_home_charger_technical_info, charger
-                    )
+                    await client.get_home_charger_technical_info(charger)
                 )
-                data[ACCT_HOME_CRGS][charger] = (hcrg_status, hcrg_tech_info)
+                hcrg_config: HomeChargerConfiguration = (
+                    await client.get_home_charger_config(charger)
+                )
+                data[ACCT_HOME_CRGS][charger] = {
+                    ACCT_CHARGER_STATUS: hcrg_status,
+                    ACCT_CHARGER_TECH_INFO: hcrg_tech_info,
+                    ACCT_CHARGER_CONFIG: hcrg_config,
+                }
 
             return data
-        except ChargePointInvalidSession:
-            if not is_retry:
-                _LOGGER.warning(
-                    "ChargePoint Session Token is invalid, attempting to re-login"
-                )
-                try:
-                    await hass.async_add_executor_job(client.login, username, password)
-                    hass.config_entries.async_update_entry(
-                        entry,
-                        data={
-                            **entry.data,
-                            CONF_ACCESS_TOKEN: session_token,
-                        },
-                    )
-                    return await async_update_data(is_retry=True)
-                except ChargePointLoginError as exc:
-                    _LOGGER.error("Failed to authenticate to ChargePoint")
-                    raise ConfigEntryAuthFailed(exc) from exc
-
-        except ChargePointCommunicationException as err:
+        except (DatadomeCaptcha, InvalidSession) as exc:
+            _LOGGER.error(
+                "ChargePoint session is invalid or blocked by Datadome captcha. "
+                "Reauthentication required."
+            )
+            raise ConfigEntryAuthFailed(exc) from exc
+        except CommunicationError as err:
             _LOGGER.error("Failed to update ChargePoint State")
             raise UpdateFailed from err
 
@@ -197,6 +201,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Fetch initial data so we have data when entities subscribe
     await coordinator.async_config_entry_first_refresh()
 
+    # Remove the old charging_session switch entity — replaced by Start/Stop buttons
+    entity_registry = er.async_get(hass)
+    for charger_id in coordinator.data[ACCT_HOME_CRGS].keys():
+        old_entity_id = entity_registry.async_get_entity_id(
+            "switch", DOMAIN, f"{charger_id}_charging_session"
+        )
+        if old_entity_id:
+            _LOGGER.debug(
+                "Removing legacy charging_session switch entity: %s", old_entity_id
+            )
+            entity_registry.async_remove(old_entity_id)
+
     # Setup components
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -208,7 +224,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id)
+        client: ChargePoint = entry_data[DATA_CLIENT]
+        await client.close()
 
     return unload_ok
 
@@ -222,7 +240,7 @@ class ChargePointEntity(CoordinatorEntity):
         self.client = client
 
     @property
-    def account(self) -> ChargePointAccount:
+    def account(self) -> Account:
         """Shortcut to access account info for the entity."""
         return self.coordinator.data[ACCT_INFO]
 
@@ -233,7 +251,7 @@ class ChargePointEntity(CoordinatorEntity):
 
 
 class ChargePointChargerEntity(CoordinatorEntity):
-    """Base ChargePoint Entity"""
+    """Base ChargePoint Charger Entity"""
 
     def __init__(
         self, client: ChargePoint, coordinator: DataUpdateCoordinator, charger_id: int
@@ -249,31 +267,47 @@ class ChargePointChargerEntity(CoordinatorEntity):
         )
         self.short_charger_model = self.charger_status.model.split("-")[0]
 
+        # Use station_nickname from config if available, fall back to model-based name
+        charger_config = self.charger_config
+        if charger_config and charger_config.station_nickname:
+            device_name = charger_config.station_nickname
+        elif "CPH" in self.short_charger_model:
+            device_name = f"{self.manufacturer} Home Flex ({self.short_charger_model})"
+        else:
+            device_name = f"{self.manufacturer} {self.short_charger_model}"
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, str(self.charger_id))},
             manufacturer=self.manufacturer,
             model=self.charger_status.model,
-            name=(
-                f"{self.manufacturer} Home Flex ({self.short_charger_model})"
-                if "CPH" in self.short_charger_model
-                else f"{self.manufacturer} {self.short_charger_model}"
-            ),
+            name=device_name,
             sw_version=self.technical_info.software_version,
+            configuration_url="https://www.chargepoint.com",
         )
 
     @property
     def charger_status(self) -> HomeChargerStatus:
-        return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id][0]
+        return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id][
+            ACCT_CHARGER_STATUS
+        ]
 
     @property
     def technical_info(self) -> HomeChargerTechnicalInfo:
-        return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id][1]
+        return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id][
+            ACCT_CHARGER_TECH_INFO
+        ]
+
+    @property
+    def charger_config(self) -> Optional[HomeChargerConfiguration]:
+        return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id].get(
+            ACCT_CHARGER_CONFIG
+        )
 
     @property
     def session(self) -> Optional[ChargingSession]:
-        session: ChargingSession = self.coordinator.data[ACCT_SESSION]
+        session: Optional[ChargingSession] = self.coordinator.data[ACCT_SESSION]
         if not session:
-            return
+            return None
 
         _LOGGER.debug(
             "Session in progress, checking if home charger (%s): %s",
@@ -282,15 +316,8 @@ class ChargePointChargerEntity(CoordinatorEntity):
         )
         if session.device_id == self.charger_id:
             return self.coordinator.data[ACCT_SESSION]
+        return None
 
     @session.setter
     def session(self, new_session: Optional[ChargingSession]):
         self.coordinator.data[ACCT_SESSION] = new_session
-
-
-@dataclass
-class ChargePointEntityRequiredKeysMixin:
-    """Mixin for required keys on all entities."""
-
-    # Suffix to be appended to the entity name
-    name_suffix: str
