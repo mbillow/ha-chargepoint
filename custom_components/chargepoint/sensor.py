@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -11,13 +11,25 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
 from . import ChargePointChargerEntity, ChargePointEntity
-from .const import ACCT_HOME_CRGS, DATA_CLIENT, DATA_COORDINATOR, DOMAIN
+from .const import (
+    ACCT_HOME_CRGS,
+    ACCT_PUBLIC_STATIONS,
+    DATA_CLIENT,
+    DATA_COORDINATOR,
+    DOMAIN,
+    PUBLIC_STATION_ID_PREFIX,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,6 +96,47 @@ ACCOUNT_SENSORS = [
         unit=lambda entity: entity.account.account_balance.currency,
         state_class=SensorStateClass.TOTAL,
         value=lambda entity: f"{float(entity.account.account_balance.amount):.2f}",
+    ),
+    ChargePointSensorEntityDescription(
+        key="session_state",
+        name_suffix="Session State",
+        icon="mdi:battery-charging",
+        value=lambda entity: (
+            str(entity.session.charging_state).replace("_", " ").title()
+            if entity.session
+            else "Not Charging"
+        ),
+    ),
+    ChargePointSensorEntityDescription(
+        key="session_power_kw",
+        name_suffix="Session Power",
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="kW",
+        value=lambda entity: round(entity.session.power_kw, 2) if entity.session else 0,
+    ),
+    ChargePointSensorEntityDescription(
+        key="session_energy_kwh",
+        name_suffix="Session Energy",
+        icon="mdi:lightning-bolt-circle",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement="kWh",
+        value=lambda entity: (
+            round(entity.session.energy_kwh, 2) if entity.session else 0
+        ),
+    ),
+    ChargePointSensorEntityDescription(
+        key="session_cost",
+        name_suffix="Session Cost",
+        icon="mdi:cash-multiple",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        unit=lambda entity: entity.client.global_config.default_currency.symbol,
+        value=lambda entity: (
+            f"{entity.session.total_amount:.2f}" if entity.session else "0.00"
+        ),
     ),
 ]
 
@@ -186,6 +239,61 @@ CHARGER_SENSORS = [
 ]
 
 
+class ChargePointPublicStationSensor(CoordinatorEntity, SensorEntity):
+    """Base class for diagnostic sensors on a tracked public station."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator)
+        self._device_id = device_id
+        # Reference the device already registered by the binary_sensor platform.
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{PUBLIC_STATION_ID_PREFIX}{device_id}")}
+        )
+
+    @property
+    def _info(self) -> Any:
+        return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
+
+
+class ChargePointPublicMaxPowerSensor(ChargePointPublicStationSensor):
+    """Reports the station's maximum charge rate in kW."""
+
+    _attr_name = "Max Power"
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "kW"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_max_power"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        mp = self._info.max_power
+        return round(mp.max, 1) if mp else None
+
+
+class ChargePointPublicOpenStatusSensor(ChargePointPublicStationSensor):
+    """Reports whether the station is currently open or closed."""
+
+    _attr_name = "Hours"
+    _attr_icon = "mdi:clock-outline"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = (
+            f"{PUBLIC_STATION_ID_PREFIX}{device_id}_open_close_status"
+        )
+
+    @property
+    def native_value(self) -> Optional[str]:
+        return self._info.open_close_status or None
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -207,5 +315,13 @@ async def async_setup_entry(
                     client, coordinator, description, charger_id
                 )
             )
+
+    for device_id in coordinator.data.get(ACCT_PUBLIC_STATIONS, {}).keys():
+        entities.extend(
+            [
+                ChargePointPublicMaxPowerSensor(coordinator, device_id),
+                ChargePointPublicOpenStatusSensor(coordinator, device_id),
+            ]
+        )
 
     async_add_entities(entities)
