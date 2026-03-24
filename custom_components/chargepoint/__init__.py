@@ -3,16 +3,18 @@ Custom integration to integrate ChargePoint with Home Assistant.
 
 """
 
+import asyncio
 import logging
 import os
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -44,15 +46,18 @@ from .const import (
     ACCT_CRG_STATUS,
     ACCT_HOME_CRGS,
     ACCT_INFO,
+    ACCT_PUBLIC_STATIONS,
     ACCT_SESSION,
     DATA_CLIENT,
     DATA_COORDINATOR,
     DOMAIN,
     ISSUE_URL,
     OPTION_POLL_INTERVAL,
+    OPTION_PUBLIC_CHARGERS,
     PLATFORMS,
     POLL_INTERVAL_DEFAULT,
     POLL_INTERVAL_OPTIONS,
+    PUBLIC_STATION_ID_PREFIX,
     TOKEN_FILE_NAME,
     VERSION,
 )
@@ -60,6 +65,71 @@ from .const import (
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
+
+
+def _remove_stale_public_entities(
+    hass: HomeAssistant, entry: ConfigEntry, current_public_ids: set
+) -> None:
+    """Remove entities and devices for public stations no longer being tracked."""
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+
+    for entity_entry in er.async_entries_for_config_entry(
+        entity_registry, entry.entry_id
+    ):
+        uid = entity_entry.unique_id or ""
+        if not uid.startswith(PUBLIC_STATION_ID_PREFIX):
+            continue
+        try:
+            device_id = int(uid.split("_")[1])
+        except (IndexError, ValueError):
+            continue
+        if device_id not in current_public_ids:
+            _LOGGER.debug(
+                "Removing stale public station entity: %s", entity_entry.entity_id
+            )
+            entity_registry.async_remove(entity_entry.entity_id)
+
+    # Remove the device itself for each stale station. HA won't do this
+    # automatically when entities are removed programmatically.
+    for device_entry in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    ):
+        for identifier in device_entry.identifiers:
+            if identifier[0] != DOMAIN:
+                continue
+            key = identifier[1]
+            if not isinstance(key, str) or not key.startswith(PUBLIC_STATION_ID_PREFIX):
+                continue
+            try:
+                device_id = int(key.split("_")[1])
+            except (IndexError, ValueError):
+                break
+            if device_id not in current_public_ids:
+                _LOGGER.debug(
+                    "Removing stale public station device: %s", device_entry.id
+                )
+                device_registry.async_remove_device(device_entry.id)
+            break
+
+
+async def _fetch_public_stations(
+    client: ChargePoint, options: Mapping[str, Any]
+) -> dict[int, Any]:
+    """Fetch StationInfo for every tracked public station, concurrently."""
+    chargers = options.get(OPTION_PUBLIC_CHARGERS, [])
+    if not chargers:
+        return {}
+
+    async def _fetch_one(device_id: int) -> tuple[int, Any]:
+        try:
+            return device_id, await client.get_station(device_id)
+        except CommunicationError:
+            _LOGGER.warning("Failed to fetch public station %s, skipping", device_id)
+            return device_id, None
+
+    results = await asyncio.gather(*(_fetch_one(c["id"]) for c in chargers))
+    return {device_id: info for device_id, info in results if info is not None}
 
 
 def remove_legacy_password(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -129,6 +199,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             ACCT_CRG_STATUS: None,
             ACCT_SESSION: None,
             ACCT_HOME_CRGS: {},
+            ACCT_PUBLIC_STATIONS: {},
         }
         try:
             account: Account = await client.get_account()
@@ -164,6 +235,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                     ACCT_CHARGER_TECH_INFO: hcrg_tech_info,
                     ACCT_CHARGER_CONFIG: hcrg_config,
                 }
+
+            data[ACCT_PUBLIC_STATIONS] = await _fetch_public_stations(
+                client, entry.options
+            )
 
             return data
         except (DatadomeCaptcha, InvalidSession) as exc:
@@ -213,6 +288,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             )
             entity_registry.async_remove(old_entity_id)
 
+    # Remove entities and devices for public stations that are no longer tracked.
+    _remove_stale_public_entities(
+        hass, entry, set(coordinator.data.get(ACCT_PUBLIC_STATIONS, {}).keys())
+    )
+
     # Setup components
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -248,6 +328,11 @@ class ChargePointEntity(CoordinatorEntity):
     def charging_status(self) -> UserChargingStatus:
         """Shortcut to access charging status for the entity."""
         return self.coordinator.data[ACCT_CRG_STATUS]
+
+    @property
+    def session(self) -> Optional[ChargingSession]:
+        """Shortcut to access the active charging session, if any."""
+        return self.coordinator.data[ACCT_SESSION]
 
 
 class ChargePointChargerEntity(CoordinatorEntity):

@@ -12,7 +12,11 @@ from python_chargepoint.exceptions import (
     LoginError,
 )
 
-from custom_components.chargepoint.const import CONF_USERNAME, DOMAIN
+from custom_components.chargepoint.const import (
+    CONF_USERNAME,
+    DOMAIN,
+    OPTION_PUBLIC_CHARGERS,
+)
 
 # ---------------------------------------------------------------------------
 # Enable custom integrations for every test in this package
@@ -32,6 +36,9 @@ CHARGER_ID = 11111111
 USER_ID = 12345
 USERNAME = "test@example.com"
 COULOMB_TOKEN = "test-coulomb-token-abc123"
+
+PUBLIC_STATION_ID = 124429
+PUBLIC_STATION_ID_2 = 567890
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +101,59 @@ def make_mock_session(*, state="IN_USE"):
     session.total_amount = 1.50
     session.stop = AsyncMock()
     return session
+
+
+def make_mock_station_info(*, available: bool = True) -> MagicMock:
+    """Return a MagicMock shaped like StationInfo."""
+    info = MagicMock()
+    info.station_status_v2 = "available" if available else "in_use"
+    info.name = ["Test Public Station"]
+    info.model_number = "CPF50"
+    info.device_software_version = "2.1.0"
+    info.network.display_name = "ChargePoint"
+    info.address.address1 = "123 Test St"
+    info.address.city = "Testville"
+    info.address.state = "CA"
+    info.open_close_status = "Open 24 Hours"
+    info.ports_info.port_count = 2
+
+    max_power = MagicMock()
+    max_power.max = 7.2
+    info.max_power = max_power
+
+    connector = MagicMock()
+    connector.display_plug_type = "J1772"
+
+    port_power = MagicMock()
+    port_power.max = 7.2
+
+    port1 = MagicMock()
+    port1.outlet_number = 1
+    port1.status_v2 = "available" if available else "in_use"
+    port1.level = "L2"
+    port1.connector_list = [connector]
+    port1.power_range = port_power
+
+    port2 = MagicMock()
+    port2.outlet_number = 2
+    port2.status_v2 = "in_use"
+    port2.level = "L2"
+    port2.connector_list = [connector]
+    port2.power_range = port_power
+
+    info.ports_info.ports = [port1, port2]
+    return info
+
+
+def make_mock_map_station(device_id: int = PUBLIC_STATION_ID) -> MagicMock:
+    """Return a MagicMock shaped like MapStation."""
+    station = MagicMock()
+    station.device_id = device_id
+    station.name1 = "Test Public Station"
+    station.address1 = "123 Test St"
+    station.city = "Testville"
+    station.station_status_v2 = "available"
+    return station
 
 
 def make_mock_user_charging_status():
@@ -187,6 +247,52 @@ async def setup_integration(hass, config_entry, mock_client):
         await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
     return config_entry
+
+
+@pytest.fixture
+def config_entry_with_public_station():
+    """Config entry pre-configured to track one public station."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_USERNAME: USERNAME,
+            CONF_ACCESS_TOKEN: COULOMB_TOKEN,
+        },
+        options={
+            OPTION_PUBLIC_CHARGERS: [
+                {
+                    "id": PUBLIC_STATION_ID,
+                    "name": "Test Public Station",
+                    "address": "123 Test St, Testville",
+                }
+            ]
+        },
+        entry_id="test_chargepoint_public_entry",
+        version=1,
+    )
+
+
+@pytest.fixture
+def mock_client_with_public_station(mock_client):
+    """Mock client that returns a public station."""
+    mock_client.get_station = AsyncMock(return_value=make_mock_station_info())
+    return mock_client
+
+
+@pytest.fixture
+async def setup_integration_with_public_station(
+    hass, config_entry_with_public_station, mock_client_with_public_station
+):
+    """Set up the integration with one tracked public station."""
+    with patch(
+        "custom_components.chargepoint.ChargePoint.create",
+        new_callable=AsyncMock,
+        return_value=mock_client_with_public_station,
+    ):
+        config_entry_with_public_station.add_to_hass(hass)
+        await hass.config_entries.async_setup(config_entry_with_public_station.entry_id)
+        await hass.async_block_till_done()
+    return config_entry_with_public_station
 
 
 @pytest.fixture
