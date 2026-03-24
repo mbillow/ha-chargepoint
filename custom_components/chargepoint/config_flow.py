@@ -234,7 +234,10 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="captcha_token",
             data_schema=_captcha_token_schema(),
-            description_placeholders={"captcha_url": self._captcha_url or ""},
+            description_placeholders={
+                "captcha_url": self._captcha_url or "",
+                "driver_url": "https://driver.chargepoint.com",
+            },
             errors=errors,
         )
 
