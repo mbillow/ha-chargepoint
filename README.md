@@ -6,7 +6,7 @@ A cloud-polling Home Assistant component to expose ChargePoint Home Charger, Acc
 
 ## Installation
 
-1. If you haven't already installed HACS, follow [their instructions](https://hacs.xyz/docs/setup/prerequisites).
+1. If you haven't already installed HACS, follow [their instructions](https://hacs.xyz/docs/use/#getting-started-with-hacs).
 2. Navigate to HACS.
 3. Choose "Integrations"
 4. Install the integration like you would [any other HACS addon](https://hacs.xyz/docs/navigation/overview).
