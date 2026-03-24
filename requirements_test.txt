@@ -1,7 +1,6 @@
 pytest>=7.0
 pytest-asyncio>=0.23
-pytest-homeassistant-custom-component
-numpy>=1.26.0
+pytest-homeassistant-custom-component>=0.13.316
 mypy>=1.0
 pyright
 black>=25.1.0
