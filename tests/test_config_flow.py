@@ -12,15 +12,19 @@ from custom_components.chargepoint.const import (
     CONF_USERNAME,
     DOMAIN,
     OPTION_POLL_INTERVAL,
+    OPTION_PUBLIC_CHARGERS,
 )
 
 from .conftest import (
     COULOMB_TOKEN,
+    PUBLIC_STATION_ID,
     USERNAME,
     make_communication_error,
     make_datadome_captcha,
     make_invalid_session,
     make_login_error,
+    make_mock_map_station,
+    make_mock_station_info,
 )
 
 # ---------------------------------------------------------------------------
@@ -438,14 +442,22 @@ async def test_reauth_confirm_captcha_redirects_to_captcha_token_step(hass):
 # ---------------------------------------------------------------------------
 
 
-async def test_options_flow_shows_form(hass, setup_integration, config_entry):
+async def test_options_flow_shows_menu(hass, setup_integration, config_entry):
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
-    assert result["type"] == FlowResultType.FORM
+    assert result["type"] == FlowResultType.MENU
     assert result["step_id"] == "init"
+    assert "update_settings" in result["menu_options"]
+    assert "manage_chargers" in result["menu_options"]
 
 
-async def test_options_flow_success(hass, setup_integration, config_entry):
+async def test_options_update_settings(hass, setup_integration, config_entry):
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "update_settings"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "update_settings"
+
     with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
@@ -455,3 +467,206 @@ async def test_options_flow_success(hass, setup_integration, config_entry):
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "options_successful"
     assert config_entry.options[OPTION_POLL_INTERVAL] == 60
+
+
+async def test_options_manage_chargers_shows_submenu(
+    hass, setup_integration, config_entry
+):
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    assert result["type"] == FlowResultType.MENU
+    assert result["step_id"] == "manage_chargers"
+    assert "add_chargers" in result["menu_options"]
+    # No chargers tracked yet — remove should not appear
+    assert "remove_charger" not in result["menu_options"]
+
+
+async def test_options_manage_chargers_shows_remove_when_chargers_exist(
+    hass, setup_integration_with_public_station, config_entry_with_public_station
+):
+    result = await hass.config_entries.options.async_init(
+        config_entry_with_public_station.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    assert result["type"] == FlowResultType.MENU
+    assert "remove_charger" in result["menu_options"]
+
+
+async def test_options_add_chargers_success(
+    hass, setup_integration, config_entry, mock_client
+):
+    mock_client.get_nearby_stations = AsyncMock(return_value=[make_mock_map_station()])
+    mock_client.get_station = AsyncMock(return_value=make_mock_station_info())
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "add_chargers"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "location": {"latitude": 37.0, "longitude": -122.0, "radius": 200.0}
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "select_chargers"
+
+    with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"charger_ids": [str(PUBLIC_STATION_ID)]},
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "options_successful"
+    chargers = config_entry.options[OPTION_PUBLIC_CHARGERS]
+    assert len(chargers) == 1
+    assert chargers[0]["id"] == PUBLIC_STATION_ID
+    assert chargers[0]["name"] == "Test Public Station"
+
+
+async def test_options_add_chargers_no_results(
+    hass, setup_integration, config_entry, mock_client
+):
+    mock_client.get_nearby_stations = AsyncMock(return_value=[])
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"location": {"latitude": 0.0, "longitude": 0.0, "radius": 200.0}},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "add_chargers"
+    assert result["errors"] == {"base": "no_stations_found"}
+
+
+async def test_options_add_chargers_communication_error(
+    hass, setup_integration, config_entry, mock_client
+):
+    mock_client.get_nearby_stations = AsyncMock(side_effect=make_communication_error())
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "location": {"latitude": 37.0, "longitude": -122.0, "radius": 200.0}
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "add_chargers"
+    assert result["errors"] == {"base": "unknown_error"}
+
+
+async def test_options_add_chargers_does_not_duplicate_existing(
+    hass,
+    setup_integration_with_public_station,
+    config_entry_with_public_station,
+    mock_client_with_public_station,
+):
+    """Selecting an already-tracked station in the search results doesn't duplicate it."""
+    mock_client_with_public_station.get_nearby_stations = AsyncMock(
+        return_value=[make_mock_map_station()]
+    )
+
+    result = await hass.config_entries.options.async_init(
+        config_entry_with_public_station.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "location": {"latitude": 37.0, "longitude": -122.0, "radius": 200.0}
+        },
+    )
+    with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"charger_ids": [str(PUBLIC_STATION_ID)]},
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    chargers = config_entry_with_public_station.options[OPTION_PUBLIC_CHARGERS]
+    assert len(chargers) == 1
+
+
+async def test_options_remove_charger_shows_multiselect(
+    hass, setup_integration_with_public_station, config_entry_with_public_station
+):
+    """Remove charger shows a multi-select; single charger is pre-checked."""
+    result = await hass.config_entries.options.async_init(
+        config_entry_with_public_station.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "remove_charger"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "remove_charger"
+
+    with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"charger_ids": [str(PUBLIC_STATION_ID)]},
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "options_successful"
+    assert config_entry_with_public_station.options[OPTION_PUBLIC_CHARGERS] == []
+
+
+async def test_options_charger_ids_stored_as_ints(
+    hass, setup_integration, config_entry, mock_client
+):
+    mock_client.get_nearby_stations = AsyncMock(return_value=[make_mock_map_station()])
+    mock_client.get_station = AsyncMock(return_value=make_mock_station_info())
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "location": {"latitude": 37.0, "longitude": -122.0, "radius": 200.0}
+        },
+    )
+    with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"charger_ids": [str(PUBLIC_STATION_ID)]},
+        )
+
+    chargers = config_entry.options[OPTION_PUBLIC_CHARGERS]
+    assert isinstance(chargers[0]["id"], int)

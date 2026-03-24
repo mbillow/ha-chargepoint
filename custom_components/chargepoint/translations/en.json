@@ -1,16 +1,69 @@
 {
+  "entity": {
+    "binary_sensor": {
+      "public_station": {
+        "state": {
+          "on": "Available",
+          "off": "In Use"
+        }
+      },
+      "public_port": {
+        "state": {
+          "on": "Available",
+          "off": "In Use"
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
-        "title": "ChargePoint Options",
-        "description": "Configure ChargePoint component options.",
+        "menu_options": {
+          "update_settings": "Component Settings",
+          "manage_chargers": "Manage Public Chargers"
+        }
+      },
+      "update_settings": {
+        "title": "Component Settings",
         "data": {
           "poll_interval": "Refresh Poll Interval"
+        }
+      },
+      "manage_chargers": {
+        "menu_options": {
+          "add_chargers": "Add chargers",
+          "remove_charger": "Remove charger(s)"
+        }
+      },
+      "add_chargers": {
+        "title": "Add Public Chargers",
+        "description": "Drop a pin to search for nearby ChargePoint stations. Adjust the radius to widen or narrow the search.",
+        "data": {
+          "location": "Search area"
+        }
+      },
+      "select_chargers": {
+        "title": "Select chargers to track",
+        "description": "Check the stations you want to monitor. Already-tracked stations are pre-checked.",
+        "data": {
+          "charger_ids": "Stations"
+        }
+      },
+      "remove_charger": {
+        "title": "Remove chargers",
+        "description": "Check the chargers to remove. All associated entities will be removed from Home Assistant.",
+        "data": {
+          "charger_ids": "Chargers to remove"
         }
       }
     },
     "abort": {
       "options_successful": "ChargePoint options updated successfully."
+    },
+    "error": {
+      "location_required": "Please drop a pin on the map to set the search area.",
+      "no_stations_found": "No ChargePoint stations were found in the selected area. Try a smaller radius or move the pin closer to the station. The map API clusters chargers into blobs at larger zoom levels, so increasing the radius may make this worse.",
+      "unknown_error": "Failed to communicate with ChargePoint. Please check your connection and try again."
     }
   },
   "config": {
