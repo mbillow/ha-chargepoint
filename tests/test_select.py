@@ -53,19 +53,18 @@ async def test_set_amperage_limit_success(hass, config_entry, mock_client):
     mock_client.set_amperage_limit.assert_awaited_once_with(CHARGER_ID, 32)
 
 
-async def test_set_amperage_limit_raises_when_not_plugged_in(
+async def test_set_amperage_limit_works_when_not_plugged_in(
     hass, setup_integration, mock_client
 ):
-    # Default mock has is_plugged_in=False
+    # Default mock has is_plugged_in=False — limit should still be settable
     entity_id = get_entity_id(hass, "select", f"{CHARGER_ID}_charging_amperage_limit")
-    with pytest.raises(HomeAssistantError):
-        await hass.services.async_call(
-            "select",
-            "select_option",
-            {"entity_id": entity_id, "option": "32"},
-            blocking=True,
-        )
-    mock_client.set_amperage_limit.assert_not_awaited()
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": entity_id, "option": "32"},
+        blocking=True,
+    )
+    mock_client.set_amperage_limit.assert_awaited_once_with(CHARGER_ID, 32)
 
 
 async def test_set_amperage_limit_communication_error_raises(
