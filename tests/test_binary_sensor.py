@@ -2,8 +2,20 @@
 
 from unittest.mock import AsyncMock, patch
 
+from homeassistant.const import CONF_ACCESS_TOKEN
+from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.chargepoint.const import (
+    CONF_USERNAME,
+    DOMAIN,
+    OPTION_PUBLIC_CHARGERS,
+)
+
 from .conftest import (
+    COULOMB_TOKEN,
     PUBLIC_STATION_ID,
+    USERNAME,
     get_entity_id,
     make_communication_error,
     make_mock_station_info,
@@ -140,3 +152,57 @@ async def test_station_fetch_error_skipped(
         hass, "binary_sensor", f"public_{PUBLIC_STATION_ID}_available"
     )
     assert entity_id is None
+
+
+# ---------------------------------------------------------------------------
+# Multi-name device naming
+# ---------------------------------------------------------------------------
+
+
+async def test_station_device_name_combines_multiple_names(hass, mock_client):
+    """When StationInfo.name has two entries, the device name joins them with a space."""
+    info = make_mock_station_info()
+    info.name = ["CLPCCD", "DO STATION 1"]
+    mock_client.get_station = AsyncMock(return_value=info)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_USERNAME: USERNAME, CONF_ACCESS_TOKEN: COULOMB_TOKEN},
+        options={
+            OPTION_PUBLIC_CHARGERS: [
+                {
+                    "id": PUBLIC_STATION_ID,
+                    "name": "CLPCCD",
+                    "name2": "DO STATION 1",
+                    "address": "123 Test St, Testville",
+                }
+            ]
+        },
+        entry_id="test_multi_name_entry",
+        version=2,
+    )
+    with patch(
+        "custom_components.chargepoint.ChargePoint.create",
+        new_callable=AsyncMock,
+        return_value=mock_client,
+    ):
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    device_registry = dr.async_get(hass)
+    identifier = (DOMAIN, f"public_{PUBLIC_STATION_ID}")
+    device = device_registry.async_get_device(identifiers={identifier})
+    assert device is not None
+    assert device.name == "CLPCCD DO STATION 1 (123 Test St, Testville)"
+
+
+async def test_station_device_name_single_name_unchanged(
+    hass, setup_integration_with_public_station
+):
+    """When StationInfo.name has only one entry, the device name is unchanged."""
+    device_registry = dr.async_get(hass)
+    identifier = (DOMAIN, f"public_{PUBLIC_STATION_ID}")
+    device = device_registry.async_get_device(identifiers={identifier})
+    assert device is not None
+    assert device.name == "Test Public Station (123 Test St, Testville)"

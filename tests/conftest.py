@@ -145,11 +145,14 @@ def make_mock_station_info(*, available: bool = True) -> MagicMock:
     return info
 
 
-def make_mock_map_station(device_id: int = PUBLIC_STATION_ID) -> MagicMock:
+def make_mock_map_station(
+    device_id: int = PUBLIC_STATION_ID, name2: str | None = None
+) -> MagicMock:
     """Return a MagicMock shaped like MapStation."""
     station = MagicMock()
     station.device_id = device_id
     station.name1 = "Test Public Station"
+    station.name2 = name2
     station.address1 = "123 Test St"
     station.city = "Testville"
     station.station_status_v2 = "available"

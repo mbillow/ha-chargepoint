@@ -147,6 +147,46 @@ def remove_session_token_from_disk(hass: HomeAssistant) -> None:
         os.remove(file)
 
 
+def _backfill_station_name2(
+    hass: HomeAssistant, entry: ConfigEntry, public_data: dict
+) -> None:
+    """Populate name2 for any tracked public station where it is still None."""
+    chargers = list(entry.options.get(OPTION_PUBLIC_CHARGERS, []))
+    updated_chargers = []
+    names_updated = False
+    for charger in chargers:
+        charger = dict(charger)
+        if charger.get("name2") is None:
+            info = public_data.get(charger["id"])
+            if info and len(info.name) > 1:
+                charger["name2"] = info.name[1]
+                names_updated = True
+        updated_chargers.append(charger)
+    if names_updated:
+        hass.config_entries.async_update_entry(
+            entry,
+            options={**entry.options, OPTION_PUBLIC_CHARGERS: updated_chargers},
+        )
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old config entry versions."""
+    _LOGGER.debug("Migrating from version %s", config_entry.version)
+
+    if config_entry.version == 1:
+        new_options = dict(config_entry.options)
+        chargers = [dict(c) for c in new_options.get(OPTION_PUBLIC_CHARGERS, [])]
+        for charger in chargers:
+            charger.setdefault("name2", None)
+        new_options[OPTION_PUBLIC_CHARGERS] = chargers
+        hass.config_entries.async_update_entry(
+            config_entry, options=new_options, version=2
+        )
+
+    _LOGGER.debug("Migration to version %s complete", config_entry.version)
+    return True
+
+
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry):
     """Disallow configuration via YAML"""
     return True
@@ -275,6 +315,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     # Fetch initial data so we have data when entities subscribe
     await coordinator.async_config_entry_first_refresh()
+
+    # Back-fill name2 for existing tracked public stations from live StationInfo data.
+    _backfill_station_name2(hass, entry, coordinator.data.get(ACCT_PUBLIC_STATIONS, {}))
 
     # Remove the old charging_session switch entity — replaced by Start/Stop buttons
     entity_registry = er.async_get(hass)

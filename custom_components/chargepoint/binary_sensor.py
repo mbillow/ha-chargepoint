@@ -71,7 +71,7 @@ async def async_setup_entry(
 
 def _station_device_info(device_id: int, info: Any) -> DeviceInfo:
     """Build DeviceInfo for a public station. Both entity types share the same device."""
-    station_name = info.name[0] if info.name else f"Station {device_id}"
+    station_name = " ".join(info.name) if info.name else f"Station {device_id}"
     address = ", ".join(filter(None, [info.address.address1, info.address.city]))
     if address:
         station_name = f"{station_name} ({address})"

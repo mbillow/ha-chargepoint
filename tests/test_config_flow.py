@@ -670,3 +670,74 @@ async def test_options_charger_ids_stored_as_ints(
 
     chargers = config_entry.options[OPTION_PUBLIC_CHARGERS]
     assert isinstance(chargers[0]["id"], int)
+
+
+# ---------------------------------------------------------------------------
+# name2 handling
+# ---------------------------------------------------------------------------
+
+
+async def test_options_add_charger_stores_name2_when_present(
+    hass, setup_integration, config_entry, mock_client
+):
+    """When a station has name2, it is stored alongside name in the config entry."""
+    mock_client.get_nearby_stations = AsyncMock(
+        return_value=[make_mock_map_station(name2="Port A")]
+    )
+    mock_client.get_station = AsyncMock(return_value=make_mock_station_info())
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "location": {"latitude": 37.0, "longitude": -122.0, "radius": 200.0}
+        },
+    )
+    with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"charger_ids": [str(PUBLIC_STATION_ID)]},
+        )
+
+    chargers = config_entry.options[OPTION_PUBLIC_CHARGERS]
+    assert chargers[0]["name"] == "Test Public Station"
+    assert chargers[0]["name2"] == "Port A"
+
+
+async def test_options_add_charger_stores_name2_none_when_absent(
+    hass, setup_integration, config_entry, mock_client
+):
+    """When a station has no name2, None is stored so the key is always present."""
+    mock_client.get_nearby_stations = AsyncMock(
+        return_value=[make_mock_map_station(name2=None)]
+    )
+    mock_client.get_station = AsyncMock(return_value=make_mock_station_info())
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "manage_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "add_chargers"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "location": {"latitude": 37.0, "longitude": -122.0, "radius": 200.0}
+        },
+    )
+    with patch("homeassistant.config_entries.ConfigEntries.async_reload"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"charger_ids": [str(PUBLIC_STATION_ID)]},
+        )
+
+    chargers = config_entry.options[OPTION_PUBLIC_CHARGERS]
+    assert chargers[0]["name"] == "Test Public Station"
+    assert chargers[0]["name2"] is None
