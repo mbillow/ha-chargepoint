@@ -278,7 +278,6 @@ class ChargePointPublicMaxPowerSensor(ChargePointPublicStationSensor):
         return round(mp.max, 1) if mp else None
 
 
-
 class ChargePointPublicOpenStatusSensor(ChargePointPublicStationSensor):
     """Reports whether the station is currently open or closed."""
 

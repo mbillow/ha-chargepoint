@@ -26,6 +26,13 @@
           "on": "Reduced",
           "off": "Full Power"
         }
+      },
+      "public_station_full_power": {
+        "name": "Full Power Available",
+        "state": {
+          "on": "Full Power",
+          "off": "Shared"
+        }
       }
     }
   },

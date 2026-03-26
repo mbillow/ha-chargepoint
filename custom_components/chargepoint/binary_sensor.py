@@ -181,18 +181,52 @@ class ChargePointPublicPortBinarySensor(_PublicStationBinarySensor):
         port = self._port
         if port is None:
             return {}
-        return {
+        info = self._station_info
+        attrs: dict[str, Any] = {
             "level": port.level,
             "connectors": [c.display_plug_type for c in port.connector_list],
             "max_power_kw": port.power_range.max if port.power_range else None,
         }
+        if info.shared_power and info.max_power and info.ports_info.port_count:
+            available_ports = sum(
+                1 for p in info.ports_info.ports if p.status_v2.lower() == "available"
+            )
+            attrs["estimated_shared_power_kw"] = round(
+                (
+                    info.max_power.max * (available_ports / info.ports_info.port_count)
+                    if available_ports
+                    else info.max_power.max
+                ),
+                1,
+            )
+        return attrs
+
+
+class ChargePointPublicFullPowerBinarySensor(_PublicStationBinarySensor):
+    """Binary sensor that is on when every port on the station is available."""
+
+    _attr_translation_key = "public_station_full_power"
+    _attr_icon = "mdi:battery-charging-high"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_full_power"
+        self._attr_suggested_object_id = self._attr_unique_id
+        self._attr_device_info = _station_device_info(device_id, self._station_info)
+
+    @property
+    def is_on(self) -> bool:
+        return all(
+            p.status_v2.lower() == "available"
+            for p in self._station_info.ports_info.ports
+        )
 
 
 class ChargePointPublicSharedPowerBinarySensor(_PublicStationFlagBinarySensor):
     """Binary sensor reporting whether a station shares power across its ports."""
 
     _attr_translation_key = "public_station_shared_power"
-    _attr_icon = "mdi:share-variant"
+    _attr_icon = "mdi:call-split"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _flag_attr = "shared_power"
 
@@ -224,12 +258,12 @@ async def async_setup_entry(
                     coordinator, device_id, port.outlet_number
                 )
             )
-        if info.shared_power is not None:
+        if info.ports_info.port_count > 1:
             entities.append(
                 ChargePointPublicSharedPowerBinarySensor(coordinator, device_id)
             )
-        if info.reduced_power is not None:
-            entities.append(
-                ChargePointPublicReducedPowerBinarySensor(coordinator, device_id)
-            )
+        entities.append(
+            ChargePointPublicReducedPowerBinarySensor(coordinator, device_id)
+        )
+        entities.append(ChargePointPublicFullPowerBinarySensor(coordinator, device_id))
     async_add_entities(entities)
