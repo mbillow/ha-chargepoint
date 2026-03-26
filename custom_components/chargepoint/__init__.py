@@ -170,28 +170,29 @@ def _backfill_station_name2(
 async def _async_fetch_home_charger_data(
     client: ChargePoint, charger: int
 ) -> dict[str, Any]:
-    """Fetch all data for a single home charger, tolerating partial failures."""
-    hcrg_status: Optional[HomeChargerStatus] = None
-    hcrg_tech_info: Optional[HomeChargerTechnicalInfo] = None
-    hcrg_config: Optional[HomeChargerConfiguration] = None
+    """Fetch all data for a single home charger concurrently, tolerating partial failures."""
 
-    try:
-        hcrg_status = await client.get_home_charger_status(charger)
-    except CommunicationError:
-        _LOGGER.warning(
+    async def _safe_fetch(coro, warning_msg):
+        try:
+            return await coro
+        except CommunicationError:
+            _LOGGER.warning(warning_msg, charger)
+            return None
+
+    hcrg_status, hcrg_tech_info, hcrg_config = await asyncio.gather(
+        _safe_fetch(
+            client.get_home_charger_status(charger),
             "Failed to get status for charger %s, charger will be marked unavailable",
-            charger,
-        )
-
-    try:
-        hcrg_tech_info = await client.get_home_charger_technical_info(charger)
-    except CommunicationError:
-        _LOGGER.warning("Failed to get technical info for charger %s", charger)
-
-    try:
-        hcrg_config = await client.get_home_charger_config(charger)
-    except CommunicationError:
-        _LOGGER.warning("Failed to get configuration for charger %s", charger)
+        ),
+        _safe_fetch(
+            client.get_home_charger_technical_info(charger),
+            "Failed to get technical info for charger %s",
+        ),
+        _safe_fetch(
+            client.get_home_charger_config(charger),
+            "Failed to get configuration for charger %s",
+        ),
+    )
 
     return {
         ACCT_CHARGER_STATUS: hcrg_status,
@@ -242,10 +243,13 @@ async def _async_coordinator_update(
             )
 
         home_chargers: list = await client.get_home_chargers()
-        for charger in home_chargers:
-            data[ACCT_HOME_CRGS][charger] = await _async_fetch_home_charger_data(
-                client, charger
+        results = await asyncio.gather(
+            *(
+                _async_fetch_home_charger_data(client, charger)
+                for charger in home_chargers
             )
+        )
+        data[ACCT_HOME_CRGS] = dict(zip(home_chargers, results))
 
         data[ACCT_PUBLIC_STATIONS] = await _fetch_public_stations(client, entry.options)
 
@@ -436,8 +440,8 @@ class ChargePointChargerEntity(CoordinatorEntity):
         """Return True only when coordinator has fresh status data for this charger."""
         if not super().available:
             return False
-        charger_data = (
-            (self.coordinator.data or {}).get(ACCT_HOME_CRGS, {}).get(self.charger_id)
+        charger_data = self.coordinator.data.get(ACCT_HOME_CRGS, {}).get(
+            self.charger_id
         )
         return (
             charger_data is not None
