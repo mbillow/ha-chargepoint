@@ -229,67 +229,12 @@ async def test_old_switch_cleanup_is_idempotent(
 
 
 # ---------------------------------------------------------------------------
-# v0 → v1 migration
+# name2 back-fill
 # ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# v1 → v2 migration: name2 field
-# ---------------------------------------------------------------------------
-
-
-async def test_migrate_v1_to_v2_adds_name2_to_public_chargers(hass, mock_client):
-    """V1 → V2 migration adds name2: None to each tracked public charger entry."""
-    v1_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_USERNAME: USERNAME, CONF_ACCESS_TOKEN: COULOMB_TOKEN},
-        options={
-            OPTION_PUBLIC_CHARGERS: [
-                {"id": PUBLIC_STATION_ID, "name": "Old Station", "address": "1 St"},
-            ]
-        },
-        entry_id="test_v1_entry",
-        version=1,
-    )
-    mock_client.get_station = AsyncMock(return_value=make_mock_station_info())
-    with patch(
-        "custom_components.chargepoint.ChargePoint.create",
-        new_callable=AsyncMock,
-        return_value=mock_client,
-    ):
-        v1_entry.add_to_hass(hass)
-        await hass.config_entries.async_setup(v1_entry.entry_id)
-        await hass.async_block_till_done()
-
-    assert v1_entry.version == 2
-    chargers = v1_entry.options[OPTION_PUBLIC_CHARGERS]
-    assert "name2" in chargers[0]
-
-
-async def test_migrate_v1_to_v2_with_no_public_chargers(hass, mock_client):
-    """V1 → V2 migration succeeds even when no public chargers are tracked."""
-    v1_entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_USERNAME: USERNAME, CONF_ACCESS_TOKEN: COULOMB_TOKEN},
-        options={},
-        entry_id="test_v1_no_chargers",
-        version=1,
-    )
-    with patch(
-        "custom_components.chargepoint.ChargePoint.create",
-        new_callable=AsyncMock,
-        return_value=mock_client,
-    ):
-        v1_entry.add_to_hass(hass)
-        await hass.config_entries.async_setup(v1_entry.entry_id)
-        await hass.async_block_till_done()
-
-    assert v1_entry.version == 2
-    assert v1_entry.state == ConfigEntryState.LOADED
 
 
 async def test_setup_backfills_name2_from_station_info(hass, mock_client):
-    """On startup, name2 is populated from StationInfo.name when it was None."""
+    """On startup, name2 is populated from StationInfo.name when the key is absent."""
     info = make_mock_station_info()
     info.name = ["Station Name", "Port A"]
     mock_client.get_station = AsyncMock(return_value=info)
@@ -302,13 +247,12 @@ async def test_setup_backfills_name2_from_station_info(hass, mock_client):
                 {
                     "id": PUBLIC_STATION_ID,
                     "name": "Station Name",
-                    "name2": None,
                     "address": "123 Test St, Testville",
                 }
             ]
         },
         entry_id="test_backfill_entry",
-        version=2,
+        version=1,
     )
     with patch(
         "custom_components.chargepoint.ChargePoint.create",
@@ -343,7 +287,7 @@ async def test_setup_does_not_update_when_name2_already_set(hass, mock_client):
             ]
         },
         entry_id="test_no_overwrite_entry",
-        version=2,
+        version=1,
     )
     with patch(
         "custom_components.chargepoint.ChargePoint.create",

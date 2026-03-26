@@ -145,7 +145,7 @@ async def _login_with_token(
 class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
     """Config flow for ChargePoint."""
 
-    VERSION = 2
+    VERSION = 1
     CONNECTION_CLASS = CONN_CLASS_CLOUD_POLL
 
     def __init__(self):

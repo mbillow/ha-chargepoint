@@ -179,7 +179,7 @@ async def test_station_device_name_combines_multiple_names(hass, mock_client):
             ]
         },
         entry_id="test_multi_name_entry",
-        version=2,
+        version=1,
     )
     with patch(
         "custom_components.chargepoint.ChargePoint.create",

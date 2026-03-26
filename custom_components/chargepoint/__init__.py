@@ -167,25 +167,6 @@ def _backfill_station_name2(
         )
 
 
-async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Migrate old config entry versions."""
-    _LOGGER.debug("Migrating from version %s", config_entry.version)
-
-    if config_entry.version == 1:
-        chargers = [
-            {"name2": None, **c}
-            for c in config_entry.options.get(OPTION_PUBLIC_CHARGERS, [])
-        ]
-        hass.config_entries.async_update_entry(
-            config_entry,
-            options={**config_entry.options, OPTION_PUBLIC_CHARGERS: chargers},
-            version=2,
-        )
-
-    _LOGGER.debug("Migration to version %s complete", config_entry.version)
-    return True
-
-
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry):
     """Disallow configuration via YAML"""
     return True
