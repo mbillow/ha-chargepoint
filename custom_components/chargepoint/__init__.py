@@ -226,30 +226,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             _LOGGER.debug("Account information: %s", account)
             data[ACCT_INFO] = account
 
-            crg_status: Optional[UserChargingStatus] = (
-                await client.get_user_charging_status()
-            )
-            _LOGGER.debug("User charging status: %s", crg_status)
-            data[ACCT_CRG_STATUS] = crg_status
-
-            if crg_status:
-                crg_session: ChargingSession = await client.get_charging_session(
-                    crg_status.session_id
+            try:
+                crg_status: Optional[UserChargingStatus] = (
+                    await client.get_user_charging_status()
                 )
-                _LOGGER.debug("Charging session: %s", crg_session)
-                data[ACCT_SESSION] = crg_session
+                _LOGGER.debug("User charging status: %s", crg_status)
+                data[ACCT_CRG_STATUS] = crg_status
+
+                if crg_status:
+                    try:
+                        crg_session: ChargingSession = await client.get_charging_session(
+                            crg_status.session_id
+                        )
+                        _LOGGER.debug("Charging session: %s", crg_session)
+                        data[ACCT_SESSION] = crg_session
+                    except CommunicationError:
+                        _LOGGER.warning(
+                            "Failed to fetch active charging session details, "
+                            "session data will be unavailable this update"
+                        )
+            except CommunicationError:
+                _LOGGER.warning(
+                    "Failed to fetch user charging status, "
+                    "session data will be unavailable this update"
+                )
 
             home_chargers: list = await client.get_home_chargers()
             for charger in home_chargers:
-                hcrg_status: HomeChargerStatus = await client.get_home_charger_status(
-                    charger
-                )
-                hcrg_tech_info: HomeChargerTechnicalInfo = (
-                    await client.get_home_charger_technical_info(charger)
-                )
-                hcrg_config: HomeChargerConfiguration = (
-                    await client.get_home_charger_config(charger)
-                )
+                hcrg_status: Optional[HomeChargerStatus] = None
+                hcrg_tech_info: Optional[HomeChargerTechnicalInfo] = None
+                hcrg_config: Optional[HomeChargerConfiguration] = None
+
+                try:
+                    hcrg_status = await client.get_home_charger_status(charger)
+                except CommunicationError:
+                    _LOGGER.warning(
+                        "Failed to get status for charger %s, "
+                        "charger will be marked unavailable",
+                        charger,
+                    )
+
+                try:
+                    hcrg_tech_info = await client.get_home_charger_technical_info(
+                        charger
+                    )
+                except CommunicationError:
+                    _LOGGER.warning(
+                        "Failed to get technical info for charger %s", charger
+                    )
+
+                try:
+                    hcrg_config = await client.get_home_charger_config(charger)
+                except CommunicationError:
+                    _LOGGER.warning(
+                        "Failed to get configuration for charger %s", charger
+                    )
+
                 data[ACCT_HOME_CRGS][charger] = {
                     ACCT_CHARGER_STATUS: hcrg_status,
                     ACCT_CHARGER_TECH_INFO: hcrg_tech_info,
@@ -391,6 +423,19 @@ class ChargePointChargerEntity(CoordinatorEntity):
             name=device_name,
             sw_version=self.technical_info.software_version,
             configuration_url="https://www.chargepoint.com",
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True only when coordinator has fresh status data for this charger."""
+        if not super().available:
+            return False
+        charger_data = (self.coordinator.data or {}).get(ACCT_HOME_CRGS, {}).get(
+            self.charger_id
+        )
+        return (
+            charger_data is not None
+            and charger_data.get(ACCT_CHARGER_STATUS) is not None
         )
 
     @property
