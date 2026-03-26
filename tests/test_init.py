@@ -155,6 +155,74 @@ async def test_coordinator_communication_error_raises_update_failed(
         await coordinator._async_update_data()
 
 
+async def test_coordinator_charger_config_error_does_not_fail_update(
+    hass, setup_integration, mock_client
+):
+    """A 500 from get_home_charger_config should not crash the coordinator update."""
+    from custom_components.chargepoint.const import (
+        ACCT_CHARGER_CONFIG,
+        ACCT_CHARGER_STATUS,
+        ACCT_HOME_CRGS,
+        DATA_COORDINATOR,
+    )
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+    mock_client.get_home_charger_config = AsyncMock(
+        side_effect=make_communication_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    # Update should succeed and charger status should still be present
+    assert CHARGER_ID in data[ACCT_HOME_CRGS]
+    assert data[ACCT_HOME_CRGS][CHARGER_ID][ACCT_CHARGER_STATUS] is not None
+    # Config should be None since the call failed
+    assert data[ACCT_HOME_CRGS][CHARGER_ID][ACCT_CHARGER_CONFIG] is None
+
+
+async def test_coordinator_charger_status_error_sets_status_none(
+    hass, setup_integration, mock_client
+):
+    """A failed get_home_charger_status stores None so the entity goes unavailable."""
+    from custom_components.chargepoint.const import (
+        ACCT_CHARGER_STATUS,
+        ACCT_HOME_CRGS,
+        DATA_COORDINATOR,
+    )
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+    mock_client.get_home_charger_status = AsyncMock(
+        side_effect=make_communication_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert CHARGER_ID in data[ACCT_HOME_CRGS]
+    assert data[ACCT_HOME_CRGS][CHARGER_ID][ACCT_CHARGER_STATUS] is None
+
+
+async def test_coordinator_charging_status_error_does_not_fail_update(
+    hass, setup_integration, mock_client
+):
+    """A failed get_user_charging_status should not crash the coordinator update."""
+    from custom_components.chargepoint.const import (
+        ACCT_CRG_STATUS,
+        ACCT_HOME_CRGS,
+        DATA_COORDINATOR,
+    )
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+    mock_client.get_user_charging_status = AsyncMock(
+        side_effect=make_communication_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    # Charging status stays None but home charger data is still populated
+    assert data[ACCT_CRG_STATUS] is None
+    assert CHARGER_ID in data[ACCT_HOME_CRGS]
+
+
 # ---------------------------------------------------------------------------
 # async_unload_entry
 # ---------------------------------------------------------------------------
