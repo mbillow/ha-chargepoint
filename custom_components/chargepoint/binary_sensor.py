@@ -50,7 +50,7 @@ def _plug_icon(display_plug_type: str) -> str:
 
 
 def _station_device_info(device_id: int, info: Any) -> DeviceInfo:
-    """Build DeviceInfo for a public station. Both entity types share the same device."""
+    """Build DeviceInfo for a public station. All entity types share the same device."""
     station_name = " ".join(info.name) if info.name else f"Station {device_id}"
     address = ", ".join(filter(None, [info.address.address1, info.address.city]))
     if address:
@@ -66,24 +66,49 @@ def _station_device_info(device_id: int, info: Any) -> DeviceInfo:
     )
 
 
-class ChargePointPublicStationBinarySensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor reporting overall station availability."""
+class _PublicStationBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Base class for all public station binary sensors."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "public_station"
 
     def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
         super().__init__(coordinator)
         self._device_id = device_id
-        info = self._station_info
-        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_available"
-        self._attr_suggested_object_id = self._attr_unique_id
-        self._attr_name = "Available"
-        self._attr_device_info = _station_device_info(device_id, info)
 
     @property
     def _station_info(self) -> Any:
         return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
+
+
+class _PublicStationFlagBinarySensor(_PublicStationBinarySensor):
+    """Base for simple boolean flag sensors (shared_power, reduced_power, etc.)."""
+
+    _flag_attr: str  # StationInfo attribute name; also used as the unique_id suffix
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = (
+            f"{PUBLIC_STATION_ID_PREFIX}{device_id}_{self._flag_attr}"
+        )
+        self._attr_suggested_object_id = self._attr_unique_id
+        self._attr_device_info = _station_device_info(device_id, self._station_info)
+
+    @property
+    def is_on(self) -> Optional[bool]:
+        return getattr(self._station_info, self._flag_attr)
+
+
+class ChargePointPublicStationBinarySensor(_PublicStationBinarySensor):
+    """Binary sensor reporting overall station availability."""
+
+    _attr_translation_key = "public_station"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_available"
+        self._attr_suggested_object_id = self._attr_unique_id
+        self._attr_name = "Available"
+        self._attr_device_info = _station_device_info(device_id, self._station_info)
 
     @property
     def is_on(self) -> bool:
@@ -104,10 +129,9 @@ class ChargePointPublicStationBinarySensor(CoordinatorEntity, BinarySensorEntity
         }
 
 
-class ChargePointPublicPortBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ChargePointPublicPortBinarySensor(_PublicStationBinarySensor):
     """Binary sensor reporting individual port availability."""
 
-    _attr_has_entity_name = True
     _attr_translation_key = "public_port"
 
     def __init__(
@@ -116,8 +140,7 @@ class ChargePointPublicPortBinarySensor(CoordinatorEntity, BinarySensorEntity):
         device_id: int,
         outlet_number: int,
     ) -> None:
-        super().__init__(coordinator)
-        self._device_id = device_id
+        super().__init__(coordinator, device_id)
         self._outlet_number = outlet_number
         info = self._station_info
         self._attr_unique_id = (
@@ -138,10 +161,6 @@ class ChargePointPublicPortBinarySensor(CoordinatorEntity, BinarySensorEntity):
         else:
             self._attr_name = f"Port {outlet_number}"
             self._attr_icon = _DEFAULT_PLUG_ICON
-
-    @property
-    def _station_info(self) -> Any:
-        return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
 
     @property
     def _port(self) -> Optional[Any]:
@@ -169,52 +188,22 @@ class ChargePointPublicPortBinarySensor(CoordinatorEntity, BinarySensorEntity):
         }
 
 
-class ChargePointPublicSharedPowerBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ChargePointPublicSharedPowerBinarySensor(_PublicStationFlagBinarySensor):
     """Binary sensor reporting whether a station shares power across its ports."""
 
-    _attr_has_entity_name = True
     _attr_translation_key = "public_station_shared_power"
     _attr_icon = "mdi:share-variant"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
-        super().__init__(coordinator)
-        self._device_id = device_id
-        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_shared_power"
-        self._attr_suggested_object_id = self._attr_unique_id
-        self._attr_device_info = _station_device_info(device_id, self._station_info)
-
-    @property
-    def _station_info(self) -> Any:
-        return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
-
-    @property
-    def is_on(self) -> Optional[bool]:
-        return self._station_info.shared_power
+    _flag_attr = "shared_power"
 
 
-class ChargePointPublicReducedPowerBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ChargePointPublicReducedPowerBinarySensor(_PublicStationFlagBinarySensor):
     """Binary sensor reporting whether a station is operating at reduced power."""
 
-    _attr_has_entity_name = True
     _attr_translation_key = "public_station_reduced_power"
-    _attr_icon = "mdi:lightning-bolt-off"
+    _attr_icon = "mdi:transmission-tower-off"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
-        super().__init__(coordinator)
-        self._device_id = device_id
-        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_reduced_power"
-        self._attr_suggested_object_id = self._attr_unique_id
-        self._attr_device_info = _station_device_info(device_id, self._station_info)
-
-    @property
-    def _station_info(self) -> Any:
-        return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
-
-    @property
-    def is_on(self) -> Optional[bool]:
-        return self._station_info.reduced_power
+    _flag_attr = "reduced_power"
 
 
 async def async_setup_entry(
