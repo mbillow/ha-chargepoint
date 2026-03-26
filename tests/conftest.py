@@ -115,6 +115,8 @@ def make_mock_station_info(*, available: bool = True) -> MagicMock:
     info.address.city = "Testville"
     info.address.state = "CA"
     info.open_close_status = "Open 24 Hours"
+    info.shared_power = False
+    info.reduced_power = False
     info.ports_info.port_count = 2
 
     max_power = MagicMock()

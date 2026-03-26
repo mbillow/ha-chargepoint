@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -46,27 +47,6 @@ def _plug_icon(display_plug_type: str) -> str:
         if pattern in key:
             return icon
     return _DEFAULT_PLUG_ICON
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up binary sensor entities for each tracked public station."""
-    coordinator: DataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        DATA_COORDINATOR
-    ]
-    entities: list[BinarySensorEntity] = []
-    for device_id, info in coordinator.data.get(ACCT_PUBLIC_STATIONS, {}).items():
-        entities.append(ChargePointPublicStationBinarySensor(coordinator, device_id))
-        for port in info.ports_info.ports:
-            entities.append(
-                ChargePointPublicPortBinarySensor(
-                    coordinator, device_id, port.outlet_number
-                )
-            )
-    async_add_entities(entities)
 
 
 def _station_device_info(device_id: int, info: Any) -> DeviceInfo:
@@ -185,3 +165,78 @@ class ChargePointPublicPortBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "connectors": [c.display_plug_type for c in port.connector_list],
             "max_power_kw": port.power_range.max if port.power_range else None,
         }
+
+
+class ChargePointPublicSharedPowerBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor reporting whether a station shares power across its ports."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "public_station_shared_power"
+    _attr_icon = "mdi:share-variant"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator)
+        self._device_id = device_id
+        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_shared_power"
+        self._attr_device_info = _station_device_info(device_id, self._station_info)
+
+    @property
+    def _station_info(self) -> Any:
+        return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
+
+    @property
+    def is_on(self) -> Optional[bool]:
+        return self._station_info.shared_power
+
+
+class ChargePointPublicReducedPowerBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor reporting whether a station is operating at reduced power."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "public_station_reduced_power"
+    _attr_icon = "mdi:lightning-bolt-off"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
+        super().__init__(coordinator)
+        self._device_id = device_id
+        self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_reduced_power"
+        self._attr_device_info = _station_device_info(device_id, self._station_info)
+
+    @property
+    def _station_info(self) -> Any:
+        return self.coordinator.data[ACCT_PUBLIC_STATIONS][self._device_id]
+
+    @property
+    def is_on(self) -> Optional[bool]:
+        return self._station_info.reduced_power
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up binary sensor entities for each tracked public station."""
+    coordinator: DataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id][
+        DATA_COORDINATOR
+    ]
+    entities: list[BinarySensorEntity] = []
+    for device_id, info in coordinator.data.get(ACCT_PUBLIC_STATIONS, {}).items():
+        entities.append(ChargePointPublicStationBinarySensor(coordinator, device_id))
+        for port in info.ports_info.ports:
+            entities.append(
+                ChargePointPublicPortBinarySensor(
+                    coordinator, device_id, port.outlet_number
+                )
+            )
+        if info.shared_power is not None:
+            entities.append(
+                ChargePointPublicSharedPowerBinarySensor(coordinator, device_id)
+            )
+        if info.reduced_power is not None:
+            entities.append(
+                ChargePointPublicReducedPowerBinarySensor(coordinator, device_id)
+            )
+    async_add_entities(entities)

@@ -12,6 +12,20 @@
           "on": "Available",
           "off": "In Use"
         }
+      },
+      "public_station_shared_power": {
+        "name": "Shared Power",
+        "state": {
+          "on": "Shared",
+          "off": "Not Shared"
+        }
+      },
+      "public_station_reduced_power": {
+        "name": "Reduced Power",
+        "state": {
+          "on": "Reduced",
+          "off": "Full Power"
+        }
       }
     }
   },
