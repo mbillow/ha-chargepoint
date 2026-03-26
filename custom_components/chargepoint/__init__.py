@@ -151,18 +151,16 @@ def _backfill_station_name2(
     hass: HomeAssistant, entry: ConfigEntry, public_data: dict
 ) -> None:
     """Populate name2 for any tracked public station where it is still None."""
-    chargers = list(entry.options.get(OPTION_PUBLIC_CHARGERS, []))
     updated_chargers = []
-    names_updated = False
-    for charger in chargers:
-        charger = dict(charger)
+    changed = False
+    for charger in entry.options.get(OPTION_PUBLIC_CHARGERS, []):
         if charger.get("name2") is None:
             info = public_data.get(charger["id"])
             if info and len(info.name) > 1:
-                charger["name2"] = info.name[1]
-                names_updated = True
+                charger = {**charger, "name2": info.name[1]}
+                changed = True
         updated_chargers.append(charger)
-    if names_updated:
+    if changed:
         hass.config_entries.async_update_entry(
             entry,
             options={**entry.options, OPTION_PUBLIC_CHARGERS: updated_chargers},
@@ -174,13 +172,14 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     _LOGGER.debug("Migrating from version %s", config_entry.version)
 
     if config_entry.version == 1:
-        new_options = dict(config_entry.options)
-        chargers = [dict(c) for c in new_options.get(OPTION_PUBLIC_CHARGERS, [])]
-        for charger in chargers:
-            charger.setdefault("name2", None)
-        new_options[OPTION_PUBLIC_CHARGERS] = chargers
+        chargers = [
+            {"name2": None, **c}
+            for c in config_entry.options.get(OPTION_PUBLIC_CHARGERS, [])
+        ]
         hass.config_entries.async_update_entry(
-            config_entry, options=new_options, version=2
+            config_entry,
+            options={**config_entry.options, OPTION_PUBLIC_CHARGERS: chargers},
+            version=2,
         )
 
     _LOGGER.debug("Migration to version %s complete", config_entry.version)
