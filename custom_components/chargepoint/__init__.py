@@ -67,6 +67,41 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 
+def _migrate_public_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rename public station entity IDs from name-based slugs to ID-based slugs.
+
+    Entities registered before this fix have entity_ids derived from the station
+    name (e.g. binary_sensor.my_station_123_main_st_available). This renames them
+    to the stable ID-based form (e.g. binary_sensor.public_124429_available) so
+    that the entity_id no longer changes if the station name or address changes.
+    """
+    entity_registry = er.async_get(hass)
+    for entity_entry in er.async_entries_for_config_entry(
+        entity_registry, entry.entry_id
+    ):
+        uid = entity_entry.unique_id or ""
+        if not uid.startswith(PUBLIC_STATION_ID_PREFIX):
+            continue
+        desired_entity_id = f"{entity_entry.domain}.{uid}"
+        if entity_entry.entity_id == desired_entity_id:
+            continue
+        try:
+            entity_registry.async_update_entity(
+                entity_entry.entity_id, new_entity_id=desired_entity_id
+            )
+            _LOGGER.debug(
+                "Migrated public station entity ID: %s -> %s",
+                entity_entry.entity_id,
+                desired_entity_id,
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning(
+                "Could not migrate entity ID %s to %s, skipping",
+                entity_entry.entity_id,
+                desired_entity_id,
+            )
+
+
 def _remove_stale_public_entities(
     hass: HomeAssistant, entry: ConfigEntry, current_public_ids: set
 ) -> None:
@@ -357,6 +392,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     _remove_stale_public_entities(
         hass, entry, set(coordinator.data.get(ACCT_PUBLIC_STATIONS, {}).keys())
     )
+
+    # Migrate public station entity IDs from name-based slugs to ID-based slugs.
+    _migrate_public_entity_ids(hass, entry)
 
     # Setup components
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

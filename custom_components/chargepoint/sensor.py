@@ -270,11 +270,13 @@ class ChargePointPublicMaxPowerSensor(ChargePointPublicStationSensor):
     def __init__(self, coordinator: DataUpdateCoordinator, device_id: int) -> None:
         super().__init__(coordinator, device_id)
         self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_max_power"
+        self._attr_suggested_object_id = self._attr_unique_id
 
     @property
     def native_value(self) -> Optional[float]:
         mp = self._info.max_power
         return round(mp.max, 1) if mp else None
+
 
 
 class ChargePointPublicOpenStatusSensor(ChargePointPublicStationSensor):
@@ -288,6 +290,7 @@ class ChargePointPublicOpenStatusSensor(ChargePointPublicStationSensor):
         self._attr_unique_id = (
             f"{PUBLIC_STATION_ID_PREFIX}{device_id}_open_close_status"
         )
+        self._attr_suggested_object_id = self._attr_unique_id
 
     @property
     def native_value(self) -> Optional[str]:

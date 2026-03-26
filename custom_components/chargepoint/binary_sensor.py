@@ -77,6 +77,7 @@ class ChargePointPublicStationBinarySensor(CoordinatorEntity, BinarySensorEntity
         self._device_id = device_id
         info = self._station_info
         self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_available"
+        self._attr_suggested_object_id = self._attr_unique_id
         self._attr_name = "Available"
         self._attr_device_info = _station_device_info(device_id, info)
 
@@ -122,6 +123,7 @@ class ChargePointPublicPortBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = (
             f"{PUBLIC_STATION_ID_PREFIX}{device_id}_port_{outlet_number}_available"
         )
+        self._attr_suggested_object_id = self._attr_unique_id
         self._attr_device_info = _station_device_info(device_id, info)
 
         # Derive name and icon from the port's connector type when available.
@@ -179,6 +181,7 @@ class ChargePointPublicSharedPowerBinarySensor(CoordinatorEntity, BinarySensorEn
         super().__init__(coordinator)
         self._device_id = device_id
         self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_shared_power"
+        self._attr_suggested_object_id = self._attr_unique_id
         self._attr_device_info = _station_device_info(device_id, self._station_info)
 
     @property
@@ -202,6 +205,7 @@ class ChargePointPublicReducedPowerBinarySensor(CoordinatorEntity, BinarySensorE
         super().__init__(coordinator)
         self._device_id = device_id
         self._attr_unique_id = f"{PUBLIC_STATION_ID_PREFIX}{device_id}_reduced_power"
+        self._attr_suggested_object_id = self._attr_unique_id
         self._attr_device_info = _station_device_info(device_id, self._station_info)
 
     @property
