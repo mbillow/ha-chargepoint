@@ -147,6 +147,26 @@ def remove_session_token_from_disk(hass: HomeAssistant) -> None:
         os.remove(file)
 
 
+def _backfill_station_name2(
+    hass: HomeAssistant, entry: ConfigEntry, public_data: dict
+) -> None:
+    """Populate name2 for any tracked public station where it is still None."""
+    updated_chargers = []
+    changed = False
+    for charger in entry.options.get(OPTION_PUBLIC_CHARGERS, []):
+        if charger.get("name2") is None:
+            info = public_data.get(charger["id"])
+            if info and len(info.name) > 1:
+                charger = {**charger, "name2": info.name[1]}
+                changed = True
+        updated_chargers.append(charger)
+    if changed:
+        hass.config_entries.async_update_entry(
+            entry,
+            options={**entry.options, OPTION_PUBLIC_CHARGERS: updated_chargers},
+        )
+
+
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry):
     """Disallow configuration via YAML"""
     return True
@@ -275,6 +295,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     # Fetch initial data so we have data when entities subscribe
     await coordinator.async_config_entry_first_refresh()
+
+    # Back-fill name2 for existing tracked public stations from live StationInfo data.
+    _backfill_station_name2(hass, entry, coordinator.data.get(ACCT_PUBLIC_STATIONS, {}))
 
     # Remove the old charging_session switch entity — replaced by Start/Stop buttons
     entity_registry = er.async_get(hass)

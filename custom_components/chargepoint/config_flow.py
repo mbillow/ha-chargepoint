@@ -417,6 +417,7 @@ class OptionsFlowHandler(OptionsFlow):
                     entry: dict[str, Any] = {
                         "id": sid,
                         "name": station.name1,
+                        "name2": station.name2 or None,
                         "address": addr,
                     }
                     detail = self._nearby_station_details.get(sid)
@@ -437,8 +438,9 @@ class OptionsFlowHandler(OptionsFlow):
         for s in self._nearby_stations:
             detail = self._nearby_station_details.get(s.device_id)
             summary = _connector_summary(detail) if detail else ""
+            combined_name = " ".join(filter(None, [s.name1, s.name2]))
             parts = filter(
-                None, [s.name1, s.address1, s.city, f"ID: {s.device_id}", summary]
+                None, [combined_name, s.address1, s.city, f"ID: {s.device_id}", summary]
             )
             options.append({"value": str(s.device_id), "label": " · ".join(parts)})
         pre_selected = [
@@ -489,9 +491,15 @@ class OptionsFlowHandler(OptionsFlow):
 
         options = []
         for c in chargers:
+            combined_name = " ".join(filter(None, [c["name"], c.get("name2")]))
             parts = filter(
                 None,
-                [c["name"], c.get("address"), f"ID: {c['id']}", c.get("connectors")],
+                [
+                    combined_name,
+                    c.get("address"),
+                    f"ID: {c['id']}",
+                    c.get("connectors"),
+                ],
             )
             options.append({"value": str(c["id"]), "label": " · ".join(parts)})
         # Pre-select all when there is only one so the user just hits Submit to confirm.
