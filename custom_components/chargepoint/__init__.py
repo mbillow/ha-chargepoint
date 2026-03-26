@@ -167,6 +167,100 @@ def _backfill_station_name2(
         )
 
 
+async def _async_fetch_home_charger_data(
+    client: ChargePoint, charger: int
+) -> dict[str, Any]:
+    """Fetch all data for a single home charger, tolerating partial failures."""
+    hcrg_status: Optional[HomeChargerStatus] = None
+    hcrg_tech_info: Optional[HomeChargerTechnicalInfo] = None
+    hcrg_config: Optional[HomeChargerConfiguration] = None
+
+    try:
+        hcrg_status = await client.get_home_charger_status(charger)
+    except CommunicationError:
+        _LOGGER.warning(
+            "Failed to get status for charger %s, charger will be marked unavailable",
+            charger,
+        )
+
+    try:
+        hcrg_tech_info = await client.get_home_charger_technical_info(charger)
+    except CommunicationError:
+        _LOGGER.warning("Failed to get technical info for charger %s", charger)
+
+    try:
+        hcrg_config = await client.get_home_charger_config(charger)
+    except CommunicationError:
+        _LOGGER.warning("Failed to get configuration for charger %s", charger)
+
+    return {
+        ACCT_CHARGER_STATUS: hcrg_status,
+        ACCT_CHARGER_TECH_INFO: hcrg_tech_info,
+        ACCT_CHARGER_CONFIG: hcrg_config,
+    }
+
+
+async def _async_coordinator_update(
+    client: ChargePoint, entry: ConfigEntry
+) -> dict[str, Any]:
+    """Fetch all ChargePoint data for one coordinator update cycle."""
+    data: dict[str, Any] = {
+        ACCT_INFO: None,
+        ACCT_CRG_STATUS: None,
+        ACCT_SESSION: None,
+        ACCT_HOME_CRGS: {},
+        ACCT_PUBLIC_STATIONS: {},
+    }
+    try:
+        account: Account = await client.get_account()
+        _LOGGER.debug("Account information: %s", account)
+        data[ACCT_INFO] = account
+
+        try:
+            crg_status: Optional[UserChargingStatus] = (
+                await client.get_user_charging_status()
+            )
+            _LOGGER.debug("User charging status: %s", crg_status)
+            data[ACCT_CRG_STATUS] = crg_status
+
+            if crg_status:
+                try:
+                    crg_session: ChargingSession = await client.get_charging_session(
+                        crg_status.session_id
+                    )
+                    _LOGGER.debug("Charging session: %s", crg_session)
+                    data[ACCT_SESSION] = crg_session
+                except CommunicationError:
+                    _LOGGER.warning(
+                        "Failed to fetch active charging session details, "
+                        "session data will be unavailable this update"
+                    )
+        except CommunicationError:
+            _LOGGER.warning(
+                "Failed to fetch user charging status, "
+                "session data will be unavailable this update"
+            )
+
+        home_chargers: list = await client.get_home_chargers()
+        for charger in home_chargers:
+            data[ACCT_HOME_CRGS][charger] = await _async_fetch_home_charger_data(
+                client, charger
+            )
+
+        data[ACCT_PUBLIC_STATIONS] = await _fetch_public_stations(client, entry.options)
+
+        return data
+    except (DatadomeCaptcha, InvalidSession) as exc:
+        _LOGGER.error(
+            "ChargePoint session is invalid or blocked by Datadome captcha. "
+            "Reauthentication required."
+        )
+        raise ConfigEntryAuthFailed(exc) from exc
+    except CommunicationError as err:
+        _LOGGER.error("Failed to update ChargePoint State")
+        raise UpdateFailed from err
+
+
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry):
     """Disallow configuration via YAML"""
     return True
@@ -213,95 +307,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
 
     async def async_update_data():
-        """Fetch data from ChargePoint API"""
-        data: dict[str, Any] = {
-            ACCT_INFO: None,
-            ACCT_CRG_STATUS: None,
-            ACCT_SESSION: None,
-            ACCT_HOME_CRGS: {},
-            ACCT_PUBLIC_STATIONS: {},
-        }
-        try:
-            account: Account = await client.get_account()
-            _LOGGER.debug("Account information: %s", account)
-            data[ACCT_INFO] = account
-
-            try:
-                crg_status: Optional[UserChargingStatus] = (
-                    await client.get_user_charging_status()
-                )
-                _LOGGER.debug("User charging status: %s", crg_status)
-                data[ACCT_CRG_STATUS] = crg_status
-
-                if crg_status:
-                    try:
-                        crg_session: ChargingSession = await client.get_charging_session(
-                            crg_status.session_id
-                        )
-                        _LOGGER.debug("Charging session: %s", crg_session)
-                        data[ACCT_SESSION] = crg_session
-                    except CommunicationError:
-                        _LOGGER.warning(
-                            "Failed to fetch active charging session details, "
-                            "session data will be unavailable this update"
-                        )
-            except CommunicationError:
-                _LOGGER.warning(
-                    "Failed to fetch user charging status, "
-                    "session data will be unavailable this update"
-                )
-
-            home_chargers: list = await client.get_home_chargers()
-            for charger in home_chargers:
-                hcrg_status: Optional[HomeChargerStatus] = None
-                hcrg_tech_info: Optional[HomeChargerTechnicalInfo] = None
-                hcrg_config: Optional[HomeChargerConfiguration] = None
-
-                try:
-                    hcrg_status = await client.get_home_charger_status(charger)
-                except CommunicationError:
-                    _LOGGER.warning(
-                        "Failed to get status for charger %s, "
-                        "charger will be marked unavailable",
-                        charger,
-                    )
-
-                try:
-                    hcrg_tech_info = await client.get_home_charger_technical_info(
-                        charger
-                    )
-                except CommunicationError:
-                    _LOGGER.warning(
-                        "Failed to get technical info for charger %s", charger
-                    )
-
-                try:
-                    hcrg_config = await client.get_home_charger_config(charger)
-                except CommunicationError:
-                    _LOGGER.warning(
-                        "Failed to get configuration for charger %s", charger
-                    )
-
-                data[ACCT_HOME_CRGS][charger] = {
-                    ACCT_CHARGER_STATUS: hcrg_status,
-                    ACCT_CHARGER_TECH_INFO: hcrg_tech_info,
-                    ACCT_CHARGER_CONFIG: hcrg_config,
-                }
-
-            data[ACCT_PUBLIC_STATIONS] = await _fetch_public_stations(
-                client, entry.options
-            )
-
-            return data
-        except (DatadomeCaptcha, InvalidSession) as exc:
-            _LOGGER.error(
-                "ChargePoint session is invalid or blocked by Datadome captcha. "
-                "Reauthentication required."
-            )
-            raise ConfigEntryAuthFailed(exc) from exc
-        except CommunicationError as err:
-            _LOGGER.error("Failed to update ChargePoint State")
-            raise UpdateFailed from err
+        return await _async_coordinator_update(client, entry)
 
     poll_interval = entry.options.get(OPTION_POLL_INTERVAL, POLL_INTERVAL_DEFAULT)
     if poll_interval not in POLL_INTERVAL_OPTIONS.values():
@@ -430,8 +436,8 @@ class ChargePointChargerEntity(CoordinatorEntity):
         """Return True only when coordinator has fresh status data for this charger."""
         if not super().available:
             return False
-        charger_data = (self.coordinator.data or {}).get(ACCT_HOME_CRGS, {}).get(
-            self.charger_id
+        charger_data = (
+            (self.coordinator.data or {}).get(ACCT_HOME_CRGS, {}).get(self.charger_id)
         )
         return (
             charger_data is not None

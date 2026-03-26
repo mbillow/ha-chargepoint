@@ -5,11 +5,17 @@ from unittest.mock import AsyncMock, patch
 from custom_components.chargepoint.const import (
     ACCT_CHARGER_STATUS,
     ACCT_HOME_CRGS,
-    DOMAIN,
     DATA_COORDINATOR,
+    DOMAIN,
 )
 
-from .conftest import CHARGER_ID, USER_ID, get_entity_id, make_communication_error, make_mock_charger_status
+from .conftest import (
+    CHARGER_ID,
+    USER_ID,
+    get_entity_id,
+    make_communication_error,
+    make_mock_charger_status,
+)
 
 # ---------------------------------------------------------------------------
 # Account sensors
@@ -159,9 +165,17 @@ async def test_charger_entity_unavailable_when_status_is_none(
     """When charger status fetch fails, charger entities become unavailable."""
     coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
 
-    # Simulate a failed status fetch by patching the coordinator data directly
-    coordinator.data[ACCT_HOME_CRGS][CHARGER_ID][ACCT_CHARGER_STATUS] = None
-    await coordinator.async_refresh()
+    # Push coordinator data with None status without triggering a re-fetch
+    updated_data = {
+        **coordinator.data,
+        ACCT_HOME_CRGS: {
+            CHARGER_ID: {
+                **coordinator.data[ACCT_HOME_CRGS][CHARGER_ID],
+                ACCT_CHARGER_STATUS: None,
+            }
+        },
+    }
+    coordinator.async_set_updated_data(updated_data)
     await hass.async_block_till_done()
 
     entity_id = get_entity_id(hass, "sensor", f"{CHARGER_ID}_charging_status")
