@@ -237,6 +237,7 @@ class ChargePointFlowHandler(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "captcha_url": self._captcha_url or "",
                 "driver_url": "https://driver.chargepoint.com",
+                "faq_url": "https://github.com/mbillow/ha-chargepoint/blob/main/FAQ.md#how-do-i-get-my-coulomb_sess-session-token",
             },
             errors=errors,
         )

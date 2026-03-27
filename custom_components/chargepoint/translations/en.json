@@ -106,7 +106,7 @@
       },
       "captcha_token": {
         "title": "Bot Protection Detected",
-        "description": "ChargePoint's bot protection (Datadome) blocked the password login. You can [resolve the challenge]({captcha_url}) in a browser and try again, or provide a session token directly — this is more reliable and avoids the issue entirely.\n\n**How to get your token:**\n1. Open [{driver_url}]({driver_url}) and log in normally.\n2. Open Developer Tools and find the **`coulomb_sess`** cookie for `{driver_url}`.\n3. Paste the value below.\n\nFor browser-specific instructions see the [FAQ](https://github.com/mbillow/ha-chargepoint/blob/main/FAQ.md#how-do-i-get-my-coulomb_sess-session-token).",
+        "description": "ChargePoint's bot protection (Datadome) blocked the password login. You can [resolve the challenge]({captcha_url}) in a browser and try again, or provide a session token directly — this is more reliable and avoids the issue entirely.\n\n**How to get your token:**\n1. Open [{driver_url}]({driver_url}) and log in normally.\n2. Open Developer Tools and find the **`coulomb_sess`** cookie for `{driver_url}`.\n3. Paste the value below.\n\nFor browser-specific instructions see the [FAQ]({faq_url}).",
         "data": {
           "coulomb_token": "Coulomb Token (coulomb_sess cookie)"
         }
