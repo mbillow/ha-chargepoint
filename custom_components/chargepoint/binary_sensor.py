@@ -183,6 +183,7 @@ class ChargePointPublicPortBinarySensor(_PublicStationBinarySensor):
             return {}
         info = self._station_info
         attrs: dict[str, Any] = {
+            "status": port.status_v2,
             "level": port.level,
             "connectors": [c.display_plug_type for c in port.connector_list],
             "max_power_kw": port.power_range.max if port.power_range else None,

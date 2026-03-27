@@ -18,7 +18,9 @@ Once you have installed the component, you'll need to add and configure it. From
 right.
 
 Search for ChargePoint and select the integration. You will be prompted for your
-ChargePoint credentials.
+ChargePoint credentials. If ChargePoint's bot protection blocks the login, see the
+[FAQ](FAQ.md#why-am-i-seeing-bot-protection-detected-during-setup) for how to
+authenticate using a session token instead.
 
 Once you are logged in, if you have any home chargers, you will be asked which zones/rooms
 to assign each device to.
@@ -55,11 +57,34 @@ save.
 
 Each tracked station creates:
 
-- A binary sensor for the station showing overall availability (on = available, off = in use),
-  with attributes for available port count and address.
-- A binary sensor per port, named by connector type (e.g. "Port 1 (J1772)"), with an icon
-  matching the plug standard and a `max_power_kw` attribute.
-- Diagnostic sensors for max power output and hours/open status.
+**Station availability** (`binary_sensor`) — on when the station has at least one available port.
+
+| Attribute | Description |
+|---|---|
+| `available_ports` | Number of ports currently available |
+| `total_ports` | Total number of ports on the station |
+| `address` | Street address of the station |
+
+**Per-port availability** (`binary_sensor`) — one per port, named by connector type (e.g. "Port 1 (J1772)"), with an icon matching the plug standard. On when that specific port is available.
+
+| Attribute | Description |
+|---|---|
+| `status` | Raw port status: `available`, `in_use`, `maintenance_required`, `unreachable` |
+| `level` | Charging level: `L1`, `L2`, or `DC` |
+| `connectors` | List of connector types on this port |
+| `max_power_kw` | Maximum power output in kW |
+| `estimated_shared_power_kw` | Estimated available power when the station shares power across ports (only present on shared-power stations) |
+
+**Full Power Available** (`binary_sensor`) — on when every port on the station is available simultaneously. Useful for triggering automations that need the full station capacity.
+
+**Diagnostic sensors** (disabled by default in the entity registry):
+
+| Entity | Description |
+|---|---|
+| Max Power | Station's maximum charge rate in kW |
+| Hours | Whether the station is currently open or closed |
+| Shared Power | Whether the station shares power across its ports |
+| Reduced Power | Whether the station is operating at reduced power |
 
 To remove a station, go to `Settings > Devices & Services > ChargePoint` and choose `Configure > Manage Public Chargers > Remove charger(s)`.
 
