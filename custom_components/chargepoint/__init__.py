@@ -34,6 +34,7 @@ from python_chargepoint.session import ChargingSession
 from python_chargepoint.types import (
     Account,
     HomeChargerConfiguration,
+    HomeChargerSchedule,
     HomeChargerStatus,
     HomeChargerTechnicalInfo,
     UserChargingStatus,
@@ -41,6 +42,7 @@ from python_chargepoint.types import (
 
 from .const import (
     ACCT_CHARGER_CONFIG,
+    ACCT_CHARGER_SCHEDULE,
     ACCT_CHARGER_STATUS,
     ACCT_CHARGER_TECH_INFO,
     ACCT_CRG_STATUS,
@@ -214,7 +216,7 @@ async def _async_fetch_home_charger_data(
             _LOGGER.warning(warning_msg, charger)
             return None
 
-    hcrg_status, hcrg_tech_info, hcrg_config = await asyncio.gather(
+    hcrg_status, hcrg_tech_info, hcrg_config, hcrg_schedule = await asyncio.gather(
         _safe_fetch(
             client.get_home_charger_status(charger),
             "Failed to get status for charger %s, charger will be marked unavailable",
@@ -227,12 +229,17 @@ async def _async_fetch_home_charger_data(
             client.get_home_charger_config(charger),
             "Failed to get configuration for charger %s",
         ),
+        _safe_fetch(
+            client.get_home_charger_schedule(charger),
+            "Failed to get schedule for charger %s",
+        ),
     )
 
     return {
         ACCT_CHARGER_STATUS: hcrg_status,
         ACCT_CHARGER_TECH_INFO: hcrg_tech_info,
         ACCT_CHARGER_CONFIG: hcrg_config,
+        ACCT_CHARGER_SCHEDULE: hcrg_schedule,
     }
 
 
@@ -502,6 +509,12 @@ class ChargePointChargerEntity(CoordinatorEntity):
     def charger_config(self) -> Optional[HomeChargerConfiguration]:
         return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id].get(
             ACCT_CHARGER_CONFIG
+        )
+
+    @property
+    def charger_schedule(self) -> Optional[HomeChargerSchedule]:
+        return self.coordinator.data[ACCT_HOME_CRGS][self.charger_id].get(
+            ACCT_CHARGER_SCHEDULE
         )
 
     @property

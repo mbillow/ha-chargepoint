@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 NAME = "ChargePoint"
 DOMAIN = "chargepoint"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 ATTRIBUTION = "Data provided by https://www.chargepoint.com"
 ISSUE_URL = "https://github.com/mbillow/ha-chargepoint/issues"
 
@@ -17,6 +17,8 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.TIME,
 ]
 
 
@@ -50,6 +52,7 @@ ACCT_PUBLIC_STATIONS = "public_stations"
 ACCT_CHARGER_STATUS = "status"
 ACCT_CHARGER_TECH_INFO = "tech_info"
 ACCT_CHARGER_CONFIG = "config"
+ACCT_CHARGER_SCHEDULE = "schedule"
 
 # Public station entity/device identifier prefix
 PUBLIC_STATION_ID_PREFIX = "public_"

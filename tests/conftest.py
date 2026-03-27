@@ -167,6 +167,26 @@ def make_mock_user_charging_status():
     return status
 
 
+def make_mock_home_charger_schedule(*, enabled=True):
+    weekdays = MagicMock()
+    weekdays.start_time = "09:00"
+    weekdays.end_time = "17:00"
+
+    weekends = MagicMock()
+    weekends.start_time = "10:00"
+    weekends.end_time = "14:00"
+
+    user_schedule = MagicMock()
+    user_schedule.weekdays = weekdays
+    user_schedule.weekends = weekends
+
+    schedule = MagicMock()
+    schedule.schedule_enabled = enabled
+    schedule.user_schedule = user_schedule
+    schedule.default_schedule = None
+    return schedule
+
+
 # ---------------------------------------------------------------------------
 # Exception factories — constructors require args in python-chargepoint 2.x
 # ---------------------------------------------------------------------------
@@ -209,6 +229,11 @@ def mock_client():
         return_value=make_mock_tech_info()
     )
     client.get_home_charger_config = AsyncMock(return_value=make_mock_charger_config())
+    client.get_home_charger_schedule = AsyncMock(
+        return_value=make_mock_home_charger_schedule()
+    )
+    client.set_home_charger_schedule = AsyncMock()
+    client.disable_home_charger_schedule = AsyncMock()
     client.set_amperage_limit = AsyncMock()
     client.set_led_brightness = AsyncMock()
     client.restart_home_charger = AsyncMock()

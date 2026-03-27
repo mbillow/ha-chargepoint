@@ -155,6 +155,29 @@ async def test_coordinator_communication_error_raises_update_failed(
         await coordinator._async_update_data()
 
 
+async def test_coordinator_charger_schedule_error_does_not_fail_update(
+    hass, setup_integration, mock_client
+):
+    """A 500 from get_home_charger_schedule should not crash the coordinator update."""
+    from custom_components.chargepoint.const import (
+        ACCT_CHARGER_SCHEDULE,
+        ACCT_CHARGER_STATUS,
+        ACCT_HOME_CRGS,
+        DATA_COORDINATOR,
+    )
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+    mock_client.get_home_charger_schedule = AsyncMock(
+        side_effect=make_communication_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert CHARGER_ID in data[ACCT_HOME_CRGS]
+    assert data[ACCT_HOME_CRGS][CHARGER_ID][ACCT_CHARGER_STATUS] is not None
+    assert data[ACCT_HOME_CRGS][CHARGER_ID][ACCT_CHARGER_SCHEDULE] is None
+
+
 async def test_coordinator_charger_config_error_does_not_fail_update(
     hass, setup_integration, mock_client
 ):
