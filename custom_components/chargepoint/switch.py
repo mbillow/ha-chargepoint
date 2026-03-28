@@ -22,7 +22,7 @@ class ChargePointScheduleSwitch(SwitchEntity, ChargePointChargerEntity):
     def __init__(self, client, coordinator, charger_id):
         super().__init__(client, coordinator, charger_id)
         self._attr_name = f"{self.short_charger_model} Charging Schedule"
-        self._attr_unique_id = f"{self.account.user.user_id}_{charger_id}_charging_schedule"
+        self._attr_unique_id = f"{charger_id}_charging_schedule"
 
     @property
     def available(self) -> bool:

@@ -27,7 +27,7 @@ class ChargePointLEDBrightnessNumber(NumberEntity, ChargePointChargerEntity):
     def __init__(self, client, coordinator, charger_id):
         super().__init__(client, coordinator, charger_id)
         self._attr_name = f"{self.short_charger_model} LED Brightness"
-        self._attr_unique_id = f"{self.account.user.user_id}_{charger_id}_led_brightness"
+        self._attr_unique_id = f"{charger_id}_led_brightness"
 
     @property
     def available(self) -> bool:
