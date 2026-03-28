@@ -7,6 +7,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     ACCT_CRG_STATUS,
@@ -77,6 +78,24 @@ async def async_get_config_entry_diagnostics(
         for device_id, info in data.get(ACCT_PUBLIC_STATIONS, {}).items()
     }
 
+    entity_registry = er.async_get(hass)
+    entities = [
+        {
+            "entity_id": entry.entity_id,
+            "unique_id": entry.unique_id,
+            "domain": entry.domain,
+            "disabled_by": str(entry.disabled_by) if entry.disabled_by else None,
+            "state": (
+                state.state
+                if (state := hass.states.get(entry.entity_id))
+                else "unavailable"
+            ),
+        }
+        for entry in er.async_entries_for_config_entry(
+            entity_registry, config_entry.entry_id
+        )
+    ]
+
     last_exception = coordinator.last_exception
     return async_redact_data(
         {
@@ -94,6 +113,7 @@ async def async_get_config_entry_diagnostics(
             "charging_session": _serialize(data.get(ACCT_SESSION)),
             "home_chargers": home_chargers,
             "public_stations": public_stations,
+            "entities": entities,
         },
         TO_REDACT,
     )
