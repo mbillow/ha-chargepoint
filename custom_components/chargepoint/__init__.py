@@ -69,6 +69,51 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
 
+def _migrate_charger_entity_unique_ids(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: DataUpdateCoordinator
+) -> None:
+    """Prefix home-charger entity unique IDs with the account user_id.
+
+    Before this fix, charger entity unique IDs used the format
+    ``{charger_id}_{key}``.  They now use ``{user_id}_{charger_id}_{key}``
+    so that two config entries sharing a station ID (e.g. shared chargers)
+    no longer produce colliding unique IDs.
+    """
+    account: Account = coordinator.data[ACCT_INFO]
+    user_id = account.user.user_id
+    charger_ids = set(coordinator.data[ACCT_HOME_CRGS].keys())
+
+    entity_registry = er.async_get(hass)
+    for entity_entry in er.async_entries_for_config_entry(
+        entity_registry, entry.entry_id
+    ):
+        uid = entity_entry.unique_id or ""
+        # Skip public-station entities — they use their own prefix.
+        if uid.startswith(PUBLIC_STATION_ID_PREFIX):
+            continue
+        # Skip entities that already carry the user_id prefix.
+        if uid.startswith(f"{user_id}_"):
+            continue
+        # Only migrate entries whose unique_id begins with a known charger_id.
+        for charger_id in charger_ids:
+            if uid.startswith(f"{charger_id}_"):
+                new_uid = f"{user_id}_{uid}"
+                try:
+                    entity_registry.async_update_entity(
+                        entity_entry.entity_id, new_unique_id=new_uid
+                    )
+                    _LOGGER.debug(
+                        "Migrated charger entity unique_id: %s -> %s", uid, new_uid
+                    )
+                except Exception:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "Could not migrate unique_id %s to %s, skipping",
+                        uid,
+                        new_uid,
+                    )
+                break
+
+
 def _migrate_public_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Rename public station entity IDs from name-based slugs to ID-based slugs.
 
@@ -391,6 +436,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Back-fill name2 for existing tracked public stations from live StationInfo data.
     _backfill_station_name2(hass, entry, coordinator.data.get(ACCT_PUBLIC_STATIONS, {}))
 
+    # Migrate charger entity unique IDs to include the account user_id prefix.
+    _migrate_charger_entity_unique_ids(hass, entry, coordinator)
+
     # Remove the old charging_session switch entity — replaced by Start/Stop buttons
     entity_registry = er.async_get(hass)
     for charger_id in coordinator.data[ACCT_HOME_CRGS].keys():
@@ -463,6 +511,7 @@ class ChargePointChargerEntity(CoordinatorEntity):
         super().__init__(coordinator)
         self.client = client
         self.charger_id = charger_id
+
         self.manufacturer = (
             "ChargePoint"
             if self.charger_status.brand == "CP"
@@ -487,6 +536,11 @@ class ChargePointChargerEntity(CoordinatorEntity):
             sw_version=self.technical_info.software_version,
             configuration_url="https://www.chargepoint.com",
         )
+
+    @property
+    def account(self) -> Account:
+        """Shortcut to access account info for the entity."""
+        return self.coordinator.data[ACCT_INFO]
 
     @property
     def available(self) -> bool:

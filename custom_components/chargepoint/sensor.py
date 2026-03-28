@@ -74,7 +74,7 @@ class ChargePointChargerSensorEntity(SensorEntity, ChargePointChargerEntity):
         super().__init__(client, coordinator, charger_id)
         self.entity_description = description
         self._attr_name = f"{self.short_charger_model} {description.name_suffix}"
-        self._attr_unique_id = f"{charger_id}_{description.key}"
+        self._attr_unique_id = f"{self.account.user.user_id}_{charger_id}_{description.key}"
 
     @property
     def native_unit_of_measurement(self):
