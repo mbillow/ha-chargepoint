@@ -353,7 +353,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
 
     async def async_update_data():
-        return await _async_coordinator_update(client, entry)
+        data = await _async_coordinator_update(client, entry)
+        current_token = entry.data.get(CONF_ACCESS_TOKEN)
+        fresh_token = client.coulomb_token
+        if fresh_token and fresh_token != current_token:
+            _LOGGER.debug("Persisting refreshed coulomb_sess token to config entry")
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_ACCESS_TOKEN: fresh_token}
+            )
+        return data
 
     poll_interval = entry.options.get(OPTION_POLL_INTERVAL, POLL_INTERVAL_DEFAULT)
     if poll_interval not in POLL_INTERVAL_OPTIONS.values():
