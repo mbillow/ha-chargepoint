@@ -242,6 +242,24 @@ async def _async_fetch_home_charger_data(
     }
 
 
+async def _async_recreate_client(
+    username: str, stored_token: str, old_client: ChargePoint
+) -> ChargePoint:
+    """Close a stale client and create a fresh one using the stored token.
+
+    Raises ConfigEntryAuthFailed if the token is invalid or blocked by captcha.
+    Raises UpdateFailed on communication errors.
+    """
+    await old_client.close()
+    try:
+        return await ChargePoint.create(username, coulomb_token=stored_token)
+    except (DatadomeCaptcha, InvalidSession) as exc:
+        _LOGGER.error("Automatic re-login failed; manual reauthentication required")
+        raise ConfigEntryAuthFailed(exc) from exc
+    except CommunicationError as exc:
+        raise UpdateFailed from exc
+
+
 async def _async_coordinator_update(
     client: ChargePoint, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -363,20 +381,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 "ChargePoint session has expired; attempting automatic re-login"
             )
             stored_token: str = entry.data.get(CONF_ACCESS_TOKEN) or ""
-            try:
-                await client.close()
-                client = await ChargePoint.create(
-                    username,
-                    coulomb_token=stored_token,
-                )
-                hass.data[DOMAIN][entry.entry_id][DATA_CLIENT] = client
-            except (DatadomeCaptcha, InvalidSession) as exc:
-                _LOGGER.error(
-                    "Automatic re-login failed; manual reauthentication required"
-                )
-                raise ConfigEntryAuthFailed(exc) from exc
-            except CommunicationError as exc:
-                raise UpdateFailed from exc
+            client = await _async_recreate_client(username, stored_token, client)
+            hass.data[DOMAIN][entry.entry_id][DATA_CLIENT] = client
             data = await _async_coordinator_update(client, entry)
 
         current_token = entry.data.get(CONF_ACCESS_TOKEN)
