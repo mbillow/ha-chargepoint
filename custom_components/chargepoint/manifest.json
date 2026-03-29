@@ -9,5 +9,5 @@
   "requirements": [
       "python-chargepoint>=2.3.2"
     ],
-  "version": "1.3.0"
+  "version": "1.3.1"
 }
