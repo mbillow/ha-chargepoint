@@ -16,7 +16,6 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -243,6 +242,24 @@ async def _async_fetch_home_charger_data(
     }
 
 
+async def _async_recreate_client(
+    username: str, stored_token: str, old_client: ChargePoint
+) -> ChargePoint:
+    """Close a stale client and create a fresh one using the stored token.
+
+    Raises ConfigEntryAuthFailed if the token is invalid or blocked by captcha.
+    Raises UpdateFailed on communication errors.
+    """
+    await old_client.close()
+    try:
+        return await ChargePoint.create(username, coulomb_token=stored_token)
+    except (DatadomeCaptcha, InvalidSession) as exc:
+        _LOGGER.error("Automatic re-login failed; manual reauthentication required")
+        raise ConfigEntryAuthFailed(exc) from exc
+    except CommunicationError as exc:
+        raise UpdateFailed from exc
+
+
 async def _async_coordinator_update(
     client: ChargePoint, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -332,7 +349,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         client: ChargePoint = await ChargePoint.create(
             username,
             coulomb_token=coulomb_token,
-            session=async_get_clientsession(hass),
         )
     except DatadomeCaptcha:
         _LOGGER.error(
@@ -353,7 +369,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data.setdefault(DOMAIN, {})
 
     async def async_update_data():
-        data = await _async_coordinator_update(client, entry)
+        nonlocal client
+        try:
+            data = await _async_coordinator_update(client, entry)
+        except RuntimeError:
+            # The library raises RuntimeError("Must login to use ChargePoint API")
+            # when the coulomb_sess cookie has expired from the aiohttp cookie jar.
+            # Attempt to recover automatically using the stored token before
+            # falling back to a full reauthentication prompt.
+            _LOGGER.warning(
+                "ChargePoint session has expired; attempting automatic re-login"
+            )
+            stored_token: str = entry.data.get(CONF_ACCESS_TOKEN) or ""
+            client = await _async_recreate_client(username, stored_token, client)
+            hass.data[DOMAIN][entry.entry_id][DATA_CLIENT] = client
+            data = await _async_coordinator_update(client, entry)
+
         current_token = entry.data.get(CONF_ACCESS_TOKEN)
         fresh_token = client.coulomb_token
         if fresh_token and fresh_token != current_token:

@@ -23,6 +23,7 @@ from .conftest import (
     make_communication_error,
     make_datadome_captcha,
     make_invalid_session,
+    make_mock_client,
     make_mock_station_info,
 )
 
@@ -153,6 +154,74 @@ async def test_coordinator_communication_error_raises_update_failed(
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+async def test_coordinator_runtime_error_recovers_automatically(
+    hass, setup_integration, mock_client
+):
+    """When the session cookie expires (RuntimeError), the coordinator re-logs in and retries."""
+    from custom_components.chargepoint.const import DATA_CLIENT, DATA_COORDINATOR
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+
+    # First call raises RuntimeError (session cookie expired); subsequent calls succeed.
+    mock_client.get_account = AsyncMock(
+        side_effect=[
+            RuntimeError("Must login to use ChargePoint API"),
+        ]
+    )
+
+    new_client = make_mock_client()
+    with patch(
+        "custom_components.chargepoint.ChargePoint.create",
+        new_callable=AsyncMock,
+        return_value=new_client,
+    ):
+        data = await coordinator._async_update_data()
+
+    assert data is not None
+    assert hass.data[DOMAIN][setup_integration.entry_id][DATA_CLIENT] is new_client
+    mock_client.close.assert_awaited_once()
+
+
+async def test_coordinator_runtime_error_relogin_invalid_session_raises_auth_failed(
+    hass, setup_integration, mock_client
+):
+    """When re-login after session expiry fails with InvalidSession, ConfigEntryAuthFailed is raised."""
+    from custom_components.chargepoint.const import DATA_COORDINATOR
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+    mock_client.get_account = AsyncMock(
+        side_effect=RuntimeError("Must login to use ChargePoint API")
+    )
+
+    with patch(
+        "custom_components.chargepoint.ChargePoint.create",
+        side_effect=make_invalid_session(),
+    ):
+        with pytest.raises(ConfigEntryAuthFailed):
+            await coordinator._async_update_data()
+
+
+async def test_coordinator_runtime_error_relogin_communication_error_raises_update_failed(
+    hass, setup_integration, mock_client
+):
+    """When re-login after session expiry fails with a network error, UpdateFailed is raised."""
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    from custom_components.chargepoint.const import DATA_COORDINATOR
+
+    coordinator = hass.data[DOMAIN][setup_integration.entry_id][DATA_COORDINATOR]
+    mock_client.get_account = AsyncMock(
+        side_effect=RuntimeError("Must login to use ChargePoint API")
+    )
+
+    with patch(
+        "custom_components.chargepoint.ChargePoint.create",
+        side_effect=make_communication_error(),
+    ):
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
 
 
 async def test_coordinator_charger_schedule_error_does_not_fail_update(
