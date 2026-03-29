@@ -6,15 +6,13 @@ Home Assistant custom integration for ChargePoint EV chargers. Uses the `python-
 ## Rules
 
 ### Library
-- Never pass `session=` to `ChargePoint.create()` — the library must own its aiohttp session and cookie jar to manage the `coulomb_sess` auth cookie correctly
-- `client.coulomb_token` reads live from the cookie jar; returns `None` when expired
-- `RuntimeError("Must login to use ChargePoint API")` means the session cookie expired — handle it with automatic re-login, not as a crash
+- Let the library manage its own aiohttp session — never pass `session=` to `ChargePoint.create()`
+- All library exceptions must be caught and mapped to an appropriate HA exception; never let them surface as unhandled "unexpected errors"
 
 ### Exception Handling
 - `RuntimeError` → attempt re-login via `_async_recreate_client()`; fall back to `ConfigEntryAuthFailed`
 - `InvalidSession` / `DatadomeCaptcha` → `ConfigEntryAuthFailed` (triggers reauth flow)
 - `CommunicationError` → `UpdateFailed` (coordinator retries silently)
-- Never let exceptions from the library surface as unhandled "unexpected errors"
 
 ### Architecture
 - One `DataUpdateCoordinator` per config entry; all entities share it
