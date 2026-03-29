@@ -215,9 +215,8 @@ def make_datadome_captcha(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def mock_client():
-    """A fully-mocked ChargePoint client with no active session."""
+def make_mock_client():
+    """Build a fully-mocked ChargePoint client with no active session."""
     client = MagicMock()
     client.coulomb_token = COULOMB_TOKEN
     client.global_config.default_currency.symbol = "USD"
@@ -240,6 +239,12 @@ def mock_client():
     client.start_charging_session = AsyncMock(return_value=make_mock_session())
     client.close = AsyncMock()
     return client
+
+
+@pytest.fixture
+def mock_client():
+    """A fully-mocked ChargePoint client with no active session."""
+    return make_mock_client()
 
 
 @pytest.fixture
