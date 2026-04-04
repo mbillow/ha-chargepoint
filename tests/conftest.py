@@ -88,10 +88,10 @@ def make_mock_charger_config(
     return config
 
 
-def make_mock_session(*, state="IN_USE"):
+def make_mock_session(*, state="IN_USE", device_id=CHARGER_ID):
     session = MagicMock()
     session.session_id = 99999
-    session.device_id = CHARGER_ID
+    session.device_id = device_id
     session.charging_state = state
     session.charging_time = 3_600_000  # 1 hour in milliseconds
     session.power_kw = 7.2
@@ -315,6 +315,18 @@ def mock_client_with_public_station(mock_client):
 
 
 @pytest.fixture
+def mock_client_with_public_session(mock_client):
+    """Mock client with an active IN_USE session at a public station (not a home charger)."""
+    mock_client.get_user_charging_status = AsyncMock(
+        return_value=make_mock_user_charging_status()
+    )
+    mock_client.get_charging_session = AsyncMock(
+        return_value=make_mock_session(device_id=PUBLIC_STATION_ID)
+    )
+    return mock_client
+
+
+@pytest.fixture
 async def setup_integration_with_public_station(
     hass, config_entry_with_public_station, mock_client_with_public_station
 ):
@@ -328,6 +340,22 @@ async def setup_integration_with_public_station(
         await hass.config_entries.async_setup(config_entry_with_public_station.entry_id)
         await hass.async_block_till_done()
     return config_entry_with_public_station
+
+
+@pytest.fixture
+async def setup_integration_with_public_session(
+    hass, config_entry, mock_client_with_public_session
+):
+    """Set up the integration with an active public charging session."""
+    with patch(
+        "custom_components.chargepoint.ChargePoint.create",
+        new_callable=AsyncMock,
+        return_value=mock_client_with_public_session,
+    ):
+        config_entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+    return config_entry
 
 
 @pytest.fixture
