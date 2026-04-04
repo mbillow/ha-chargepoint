@@ -175,7 +175,7 @@ Update in **three places**:
 - **Minor** (`x.Y.z`) — new entities, new platforms, new options, or non-breaking behavior changes
 - **Major** (`X.y.z`) — breaking changes: removed entities, config schema changes, or anything that requires user re-configuration
 
-Always confirm the new version string with the user before committing a version bump.
+Only bump the version once — when the user confirms they are done iterating and are ready to open a PR. Always confirm the new version string with the user before committing.
 
 ### Python version
 
