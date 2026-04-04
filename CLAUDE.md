@@ -64,7 +64,7 @@ pre-commit run --all-files
 
 This runs in order: `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-added-large-files`, `black`, `flake8`, `isort`, `mypy`, `pyright`, `pytest`.
 
-Do not run tools individually — always use `pre-commit run --all-files`.
+Do not run tools individually — always use `pre-commit run --all-files`. **Do not commit unless this passes cleanly.**
 
 ### Local HA Instance (Optional)
 
