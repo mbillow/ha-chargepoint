@@ -169,6 +169,14 @@ Update in **three places**:
 2. `requirements_test.txt`
 3. `.docker/services/run` — pinned with `==`, not a range like the others
 
+### When to bump each segment
+
+- **Patch** (`x.y.Z`) — bug fixes, no new entities or config changes
+- **Minor** (`x.Y.z`) — new entities, new platforms, new options, or non-breaking behavior changes
+- **Major** (`X.y.z`) — breaking changes: removed entities, config schema changes, or anything that requires user re-configuration
+
+Always confirm the new version string with the user before committing a version bump.
+
 ### Python version
 
 Defined in one place: `.github/workflows/combined.yaml` (`python-version:` under the `lint-and-test` job). There is no `.python-version` file; always check the workflow for the current value.
