@@ -17,7 +17,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from python_chargepoint.exceptions import CommunicationError
 
-from . import ChargePointChargerEntity
+from . import ChargePointChargerEntity, ChargePointEntity
 from .const import (
     ACCT_HOME_CRGS,
     CHARGER_SESSION_STATE_IN_USE,
@@ -124,6 +124,54 @@ class ChargePointChargerStopChargingButton(ButtonEntity, ChargePointChargerEntit
         _schedule_charging_update(self.hass, self.coordinator)
 
 
+class ChargePointStopPublicChargingButton(ButtonEntity, ChargePointEntity):
+    """Account-level button for stopping an active public charging session.
+
+    Available whenever the account has an IN_USE session that is not associated
+    with any of the user's home chargers (i.e. a public station session).
+    """
+
+    def __init__(self, client, coordinator) -> None:
+        super().__init__(client, coordinator)
+        self._attr_name = f"{self.account.user.username} Stop Public Charging"
+        self._attr_unique_id = (
+            f"{self.account.user.user_id}_stop_public_charging_session"
+        )
+        self._attr_icon = "mdi:stop"
+
+    @property
+    def _public_session(self):
+        """Return the active session only if it is at a public station."""
+        session = self.session
+        if not session:
+            return None
+        home_charger_ids = set(self.coordinator.data.get(ACCT_HOME_CRGS, {}).keys())
+        if session.device_id in home_charger_ids:
+            return None
+        return session
+
+    @property
+    def available(self) -> bool:
+        return (
+            super().available
+            and self._public_session is not None
+            and self._public_session.charging_state.upper()
+            == CHARGER_SESSION_STATE_IN_USE
+        )
+
+    async def async_press(self) -> None:
+        session = self._public_session
+        if not session:
+            raise HomeAssistantError("Cannot stop a session that doesn't exist!")
+        try:
+            _LOGGER.info("Stopping ChargePoint public session: %s", session.session_id)
+            await session.stop()
+        except CommunicationError:
+            _LOGGER.warning(EXCEPTION_WARNING_MSG)
+        await self.coordinator.async_request_refresh()
+        _schedule_charging_update(self.hass, self.coordinator)
+
+
 _RESTART_DESCRIPTION = ChargePointChargerButtonEntityDescription(
     key="restart_charger",
     name_suffix="Restart Charger",
@@ -151,7 +199,7 @@ async def async_setup_entry(
     client = hass.data[DOMAIN][config_entry.entry_id][DATA_CLIENT]
     coordinator = hass.data[DOMAIN][config_entry.entry_id][DATA_COORDINATOR]
 
-    entities = []
+    entities: list[ButtonEntity] = []
     for charger_id in coordinator.data[ACCT_HOME_CRGS].keys():
         entities += [
             ChargePointChargerRestartChargerButton(
@@ -164,5 +212,7 @@ async def async_setup_entry(
                 client, coordinator, _STOP_CHARGING_DESCRIPTION, charger_id
             ),
         ]
+
+    entities.append(ChargePointStopPublicChargingButton(client, coordinator))
 
     async_add_entities(entities)

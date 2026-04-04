@@ -40,14 +40,16 @@ tests/
 
 ### Python Version
 
-Check `.github/workflows/combined.yaml` for the canonical Python version (`python-version:` under the `lint-and-test` job). There is no `.python-version` file.
+The canonical Python version is defined in `.github/workflows/combined.yaml` under `python-version:` in the `lint-and-test` job. There is no `.python-version` file — always read the workflow to get the current value before doing anything else.
+
+**Always use the exact version from the workflow.** Do not use a generic `python3` invocation — it may resolve to a different version. For example, if the workflow specifies `3.13`, use `python3.13`.
 
 ### Installing Dependencies
 
-Create a virtual environment first, then install dependencies:
+**Always create a venv with the exact Python version from the workflow before installing anything.** Never install dependencies globally or skip venv creation because packages appear to be available already.
 
 ```bash
-python3 -m venv .venv
+python3.X -m venv .venv   # X = version from combined.yaml
 source .venv/bin/activate
 pip install -r requirements_test.txt
 ```
@@ -56,15 +58,16 @@ This installs all test, lint, type-check, and formatting tools plus `python-char
 
 ### Running Checks
 
-**All checks are run via pre-commit. This is the single source of truth.**
+**All checks are run via pre-commit from within the activated venv. This is the single source of truth.**
 
 ```bash
+source .venv/bin/activate
 pre-commit run --all-files
 ```
 
 This runs in order: `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-added-large-files`, `black`, `flake8`, `isort`, `mypy`, `pyright`, `pytest`.
 
-Do not run tools individually — always use `pre-commit run --all-files`. **Do not commit unless this passes cleanly.**
+Do not run `pytest`, `mypy`, `black`, or any other tool individually — always use `pre-commit run --all-files`. **Do not commit unless this passes cleanly.**
 
 ### Local HA Instance (Optional)
 
