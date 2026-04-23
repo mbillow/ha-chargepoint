@@ -315,6 +315,63 @@ async def test_coordinator_charging_status_error_does_not_fail_update(
     assert CHARGER_ID in data[ACCT_HOME_CRGS]
 
 
+async def test_coordinator_session_fetch_error_preserves_previous_session(
+    hass, setup_integration_with_session, mock_client_with_session
+):
+    """A failed get_charging_session preserves last known session data.
+
+    Energy sensors use TOTAL_INCREASING; returning 0 when the API is flaky
+    causes HA to reset the running total and double-count on the next
+    successful poll.  We must retain the previous session instead.
+    """
+    from custom_components.chargepoint.const import ACCT_SESSION, DATA_COORDINATOR
+
+    coordinator = hass.data[DOMAIN][setup_integration_with_session.entry_id][
+        DATA_COORDINATOR
+    ]
+    previous_session = coordinator.data[ACCT_SESSION]
+    assert previous_session is not None
+
+    mock_client_with_session.get_charging_session = AsyncMock(
+        side_effect=make_communication_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert data[ACCT_SESSION] is previous_session
+
+
+async def test_coordinator_charging_status_error_preserves_previous_session(
+    hass, setup_integration_with_session, mock_client_with_session
+):
+    """A failed get_user_charging_status preserves last known session data.
+
+    Same TOTAL_INCREASING double-count risk as above — preserve both status
+    and session from the previous successful update when the status call fails.
+    """
+    from custom_components.chargepoint.const import (
+        ACCT_CRG_STATUS,
+        ACCT_SESSION,
+        DATA_COORDINATOR,
+    )
+
+    coordinator = hass.data[DOMAIN][setup_integration_with_session.entry_id][
+        DATA_COORDINATOR
+    ]
+    previous_session = coordinator.data[ACCT_SESSION]
+    previous_status = coordinator.data[ACCT_CRG_STATUS]
+    assert previous_session is not None
+
+    mock_client_with_session.get_user_charging_status = AsyncMock(
+        side_effect=make_communication_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert data[ACCT_SESSION] is previous_session
+    assert data[ACCT_CRG_STATUS] is previous_status
+
+
 # ---------------------------------------------------------------------------
 # async_unload_entry
 # ---------------------------------------------------------------------------
