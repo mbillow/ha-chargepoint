@@ -261,7 +261,9 @@ async def _async_recreate_client(
 
 
 async def _async_coordinator_update(
-    client: ChargePoint, entry: ConfigEntry
+    client: ChargePoint,
+    entry: ConfigEntry,
+    previous_data: Optional[dict] = None,
 ) -> dict[str, Any]:
     """Fetch all ChargePoint data for one coordinator update cycle."""
     data: dict[str, Any] = {
@@ -292,14 +294,19 @@ async def _async_coordinator_update(
                     data[ACCT_SESSION] = crg_session
                 except CommunicationError:
                     _LOGGER.warning(
-                        "Failed to fetch active charging session details, "
-                        "session data will be unavailable this update"
+                        "Failed to fetch active charging session details; "
+                        "retaining last known session data to avoid energy sensor reset"
                     )
+                    if previous_data is not None:
+                        data[ACCT_SESSION] = previous_data.get(ACCT_SESSION)
         except CommunicationError:
             _LOGGER.warning(
-                "Failed to fetch user charging status, "
-                "session data will be unavailable this update"
+                "Failed to fetch user charging status; "
+                "retaining last known session data to avoid energy sensor reset"
             )
+            if previous_data is not None:
+                data[ACCT_CRG_STATUS] = previous_data.get(ACCT_CRG_STATUS)
+                data[ACCT_SESSION] = previous_data.get(ACCT_SESSION)
 
         home_chargers: list = await client.get_home_chargers()
         results = await asyncio.gather(
@@ -371,7 +378,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     async def async_update_data():
         nonlocal client
         try:
-            data = await _async_coordinator_update(client, entry)
+            data = await _async_coordinator_update(client, entry, coordinator.data)
         except RuntimeError:
             # The library raises RuntimeError("Must login to use ChargePoint API")
             # when the coulomb_sess cookie has expired from the aiohttp cookie jar.
@@ -383,7 +390,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             stored_token: str = entry.data.get(CONF_ACCESS_TOKEN) or ""
             client = await _async_recreate_client(username, stored_token, client)
             hass.data[DOMAIN][entry.entry_id][DATA_CLIENT] = client
-            data = await _async_coordinator_update(client, entry)
+            data = await _async_coordinator_update(client, entry, coordinator.data)
 
         current_token = entry.data.get(CONF_ACCESS_TOKEN)
         fresh_token = client.coulomb_token
