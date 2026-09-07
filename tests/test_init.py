@@ -20,6 +20,7 @@ from .conftest import (
     COULOMB_TOKEN,
     PUBLIC_STATION_ID,
     USERNAME,
+    make_charging_status_validation_error,
     make_communication_error,
     make_datadome_captcha,
     make_invalid_session,
@@ -339,6 +340,63 @@ async def test_coordinator_session_fetch_error_preserves_previous_session(
     data = await coordinator._async_update_data()
 
     assert data[ACCT_SESSION] is previous_session
+
+
+async def test_coordinator_session_validation_error_preserves_previous_session(
+    hass, setup_integration_with_session, mock_client_with_session
+):
+    """A malformed (empty-payload) get_charging_session response preserves last
+    known session data instead of crashing the coordinator update.
+
+    ChargePoint's session API intermittently returns an empty body for a
+    session_id it just reported as active (a stale / not-yet eventually
+    consistent session, typically the morning after a charge ends). Without
+    catching this, the ValidationError escapes the coordinator and marks
+    every ChargePoint entity unavailable. See mbillow/ha-chargepoint#98.
+    """
+    from custom_components.chargepoint.const import ACCT_SESSION, DATA_COORDINATOR
+
+    coordinator = hass.data[DOMAIN][setup_integration_with_session.entry_id][
+        DATA_COORDINATOR
+    ]
+    previous_session = coordinator.data[ACCT_SESSION]
+    assert previous_session is not None
+
+    mock_client_with_session.get_charging_session = AsyncMock(
+        side_effect=make_charging_status_validation_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert data[ACCT_SESSION] is previous_session
+
+
+async def test_coordinator_charging_status_validation_error_preserves_previous_session(
+    hass, setup_integration_with_session, mock_client_with_session
+):
+    """Same empty-payload ValidationError from get_user_charging_status preserves
+    both status and session from the previous successful update."""
+    from custom_components.chargepoint.const import (
+        ACCT_CRG_STATUS,
+        ACCT_SESSION,
+        DATA_COORDINATOR,
+    )
+
+    coordinator = hass.data[DOMAIN][setup_integration_with_session.entry_id][
+        DATA_COORDINATOR
+    ]
+    previous_session = coordinator.data[ACCT_SESSION]
+    previous_status = coordinator.data[ACCT_CRG_STATUS]
+    assert previous_session is not None
+
+    mock_client_with_session.get_user_charging_status = AsyncMock(
+        side_effect=make_charging_status_validation_error()
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert data[ACCT_SESSION] is previous_session
+    assert data[ACCT_CRG_STATUS] is previous_status
 
 
 async def test_coordinator_charging_status_error_preserves_previous_session(
