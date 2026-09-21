@@ -22,6 +22,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from pydantic import ValidationError
 from python_chargepoint import ChargePoint
 from python_chargepoint.exceptions import (
     CommunicationError,
@@ -292,14 +293,19 @@ async def _async_coordinator_update(
                     )
                     _LOGGER.debug("Charging session: %s", crg_session)
                     data[ACCT_SESSION] = crg_session
-                except CommunicationError:
+                except (CommunicationError, ValidationError):
+                    # The session API intermittently returns an empty/partial
+                    # payload for a session_id it just reported (stale / not-yet
+                    # eventually-consistent session). Without catching the
+                    # ValidationError it escapes the coordinator and marks every
+                    # ChargePoint entity unavailable until HA restarts.
                     _LOGGER.warning(
                         "Failed to fetch active charging session details; "
                         "retaining last known session data to avoid energy sensor reset"
                     )
                     if previous_data is not None:
                         data[ACCT_SESSION] = previous_data.get(ACCT_SESSION)
-        except CommunicationError:
+        except (CommunicationError, ValidationError):
             _LOGGER.warning(
                 "Failed to fetch user charging status; "
                 "retaining last known session data to avoid energy sensor reset"

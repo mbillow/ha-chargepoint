@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.const import CONF_ACCESS_TOKEN
+from pydantic import ValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from python_chargepoint.exceptions import (
     CommunicationError,
@@ -208,6 +209,19 @@ def make_datadome_captcha(
     captcha_url="https://geo.captcha-delivery.com/captcha/", message="Captcha required"
 ):
     return DatadomeCaptcha(captcha_url, message)
+
+
+def make_charging_status_validation_error():
+    """A real pydantic ValidationError, as raised by ChargingSession.async_refresh()
+    when the session API returns an empty payload for a session_id it just
+    reported as active (see mbillow/ha-chargepoint#98)."""
+    from python_chargepoint.session import _ChargingStatusData
+
+    try:
+        _ChargingStatusData.model_validate({})
+    except ValidationError as exc:
+        return exc
+    raise AssertionError("expected _ChargingStatusData.model_validate({}) to raise")
 
 
 # ---------------------------------------------------------------------------
