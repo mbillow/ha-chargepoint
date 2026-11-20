@@ -1,9 +1,11 @@
 """Tests for ChargePoint button entities."""
 
+from contextlib import nullcontext
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
+from python_chargepoint.exceptions import APIError
 
 from .conftest import (
     CHARGER_ID,
@@ -196,11 +198,18 @@ async def test_stop_charging_communication_error_does_not_raise(
 # ---------------------------------------------------------------------------
 
 
-async def test_start_charging_schedules_fast_poll(hass, config_entry, mock_client):
+@pytest.mark.parametrize("session_lookup_failed", [False, True])
+async def test_start_charging_schedules_fast_poll(
+    hass, config_entry, mock_client, session_lookup_failed
+):
     """Pressing start should schedule extra refreshes to pick up the new session state."""
     mock_client.get_home_charger_status = AsyncMock(
         return_value=make_mock_charger_status(plugged_in=True)
     )
+    if session_lookup_failed:
+        mock_client.start_charging_session.side_effect = APIError(
+            "No active charging session found after start command."
+        )
     with patch(
         "custom_components.chargepoint.ChargePoint.create",
         new_callable=AsyncMock,
@@ -211,15 +220,23 @@ async def test_start_charging_schedules_fast_poll(hass, config_entry, mock_clien
         await hass.async_block_till_done()
 
     entity_id = get_entity_id(hass, "button", f"{CHARGER_ID}_start_charging_session")
+    result = (
+        pytest.raises(
+            HomeAssistantError, match="could not confirm the charging session"
+        )
+        if session_lookup_failed
+        else nullcontext()
+    )
     with patch(
         "custom_components.chargepoint.button.async_call_later"
-    ) as mock_call_later:
+    ) as mock_call_later, result:
         await hass.services.async_call(
             "button", "press", {"entity_id": entity_id}, blocking=True
         )
 
     from custom_components.chargepoint.button import _CHARGING_FAST_POLL_DELAYS
 
+    mock_client.start_charging_session.assert_awaited_once_with(CHARGER_ID)
     assert mock_call_later.call_count == len(_CHARGING_FAST_POLL_DELAYS)
     actual_delays = {call.args[1] for call in mock_call_later.call_args_list}
     assert actual_delays == set(_CHARGING_FAST_POLL_DELAYS)
