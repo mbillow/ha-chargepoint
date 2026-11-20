@@ -15,7 +15,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from python_chargepoint.exceptions import CommunicationError
+from python_chargepoint.exceptions import APIError, CommunicationError
 
 from . import ChargePointChargerEntity, ChargePointEntity
 from .const import (
@@ -90,6 +90,14 @@ class ChargePointChargerStartChargingButton(ButtonEntity, ChargePointChargerEnti
         except CommunicationError:
             # ChargePoint sometimes returns an error even when the session started.
             _LOGGER.warning(EXCEPTION_WARNING_MSG)
+        except APIError as err:
+            # The command may have applied while the session API caught up.
+            # Keep observing even when the SDK cannot return a session yet.
+            _schedule_charging_update(self.hass, self.coordinator)
+            raise HomeAssistantError(
+                "ChargePoint could not confirm the charging session. "
+                "Check the charger status before trying again."
+            ) from err
         await self.coordinator.async_request_refresh()
         _schedule_charging_update(self.hass, self.coordinator)
 
